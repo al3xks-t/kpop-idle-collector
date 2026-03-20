@@ -8,6 +8,7 @@ import hoverSfx from "./assets/audio/hover.ogg";
 import trashSfx from "./assets/audio/trash.ogg";
 import equipSfx from "./assets/audio/equip.ogg";
 import coinSfx from "./assets/audio/coin.ogg";
+import switchSfx from "./assets/audio/switch.ogg";
 
 // import revealNormalSfx from "./assets/audio/reveal-normal.mp3";
 // import revealGoldSfx from "./assets/audio/reveal-gold.mp3";
@@ -137,6 +138,8 @@ function getMutationColor(mutation) {
 }
 
 function FloatingIncomeText({ id, amount, x, y, onDone }) {
+  const driftX = useRef((Math.random() - 0.5) * 24);
+
   const [style, setStyle] = useState({
     position: "fixed",
     left: x + Math.random() * 20 - 10,
@@ -156,7 +159,7 @@ function FloatingIncomeText({ id, amount, x, y, onDone }) {
       setStyle((s) => ({
         ...s,
         opacity: 1,
-        transform: "translateY(0px) scale(1.12)",
+        transform: "translate(0px, 0px) scale(1.12)",
       }));
     }, 10);
 
@@ -164,7 +167,7 @@ function FloatingIncomeText({ id, amount, x, y, onDone }) {
       setStyle((s) => ({
         ...s,
         opacity: 0,
-        transform: "translateY(-34px) scale(1)",
+        transform: `translate(${driftX.current}px, -34px) scale(1)`,
         transition: "transform 0.75s ease-out, opacity 0.75s ease-out",
       }));
     }, 120);
@@ -319,62 +322,63 @@ const getMutationParticleSeed = (label) => {
 const THEMES = {
   dark: {
     label: "Dark",
-    pageBg: "linear-gradient(135deg, #0f172a, #111827 50%, #4c0519)",
-    text: "#e5ebe5",
+    pageBg: "linear-gradient(135deg, #020617, #0f172a 50%, #1e1b4b)",
+    text: "#e0f2fe",
     subtext: "#94a3b8",
-    panel: "rgba(15,23,42,0.8)",
-    panelAlt: "rgba(30,41,59,0.55)",
+    panel: "rgba(10,15,30,0.86)",
+    panelAlt: "rgba(30,41,59,0.7)",
     cardBorder: "#334155",
     cardBorderSoft: "#475569",
-    button: "#1d4ed8",
-    buttonText: "#ffffff",
-    buttonAltBg: "transparent",
-    buttonAltText: "#ffffff",
-    tabActive: "#e11d48",
+    button: "#06b6d4",
+    buttonText: "#082f49",
+    buttonAltBg: "rgba(255,255,255,0.06)",
+    buttonAltText: "#e0f2fe",
+    tabActive: "#8b5cf6",
     tabInactive: "rgba(15,23,42,0.7)",
-    idolFallback: "linear-gradient(135deg, rgba(244,114,182,0.25), rgba(34,211,238,0.2))",
+    idolFallback: "linear-gradient(135deg, rgba(34,211,238,0.18), rgba(139,92,246,0.16))",
     progressBg: "#1e293b",
-    progressFill: "linear-gradient(90deg, #ec4899, #22d3ee)",
+    progressFill: "linear-gradient(90deg, #22d3ee, #8b5cf6)",
   },
 
   light: {
     label: "Light",
-    pageBg: "linear-gradient(135deg, #f8fafc, #eef2ff 55%, #ffe4e6)",
+    pageBg: "linear-gradient(135deg, #f8fafc, #f1f5f9 55%, #e2e8f0)",
     text: "#0f172a",
     subtext: "#475569",
-    panel: "rgba(255,255,255,0.92)",
-    panelAlt: "rgba(241,245,249,0.95)",
+    panel: "rgba(255,255,255,0.85)",
+    panelAlt: "rgba(248,250,252,0.95)",
     cardBorder: "#cbd5e1",
     cardBorderSoft: "#94a3b8",
-    button: "#2563eb",
+    button: "#3b82f6",
     buttonText: "#ffffff",
-    buttonAltBg: "rgba(255,255,255,0.75)",
+    buttonAltBg: "rgba(255,255,255,0.7)",
     buttonAltText: "#0f172a",
-    tabActive: "#f43f5e",
-    tabInactive: "rgba(255,255,255,0.8)",
-    idolFallback: "linear-gradient(135deg, rgba(251,113,133,0.16), rgba(56,189,248,0.14))",
+    tabActive: "#6366f1",
+    tabInactive: "rgba(241,245,249,0.9)",
+    idolFallback:
+      "linear-gradient(135deg, rgba(148,163,184,0.18), rgba(59,130,246,0.12))",
     progressBg: "#e2e8f0",
-    progressFill: "linear-gradient(90deg, #f43f5e, #38bdf8)",
+    progressFill: "linear-gradient(90deg, #3b82f6, #6366f1)",
   },
 
-  rose: {
-    label: "Rose Lounge",
-    pageBg: "linear-gradient(135deg, #2a1020, #4a1630 55%, #7c2d5f)",
-    text: "#ffe7f2",
-    subtext: "#f9a8d4",
-    panel: "rgba(60,16,40,0.82)",
-    panelAlt: "rgba(88,28,56,0.72)",
-    cardBorder: "#be5a93",
-    cardBorderSoft: "#d17aa9",
-    button: "#db2777",
+  sakura: {
+    label: "Sakura Night",
+    pageBg: "linear-gradient(135deg, #2a1220, #5b2143 52%, #f9a8d4)",
+    text: "#fff1f5",
+    subtext: "#fbcfe8",
+    panel: "rgba(56, 22, 43, 0.84)",
+    panelAlt: "rgba(91, 33, 67, 0.56)",
+    cardBorder: "#f9a8d4",
+    cardBorderSoft: "#fbcfe8",
+    button: "#ec4899",
     buttonText: "#ffffff",
     buttonAltBg: "rgba(255,255,255,0.08)",
-    buttonAltText: "#ffe7f2",
+    buttonAltText: "#fff1f5",
     tabActive: "#f472b6",
-    tabInactive: "rgba(88,28,56,0.6)",
-    idolFallback: "linear-gradient(135deg, rgba(255,182,193,0.22), rgba(255,105,180,0.16))",
-    progressBg: "#6b2149",
-    progressFill: "linear-gradient(90deg, #f472b6, #fb7185)",
+    tabInactive: "rgba(56, 22, 43, 0.62)",
+    idolFallback: "linear-gradient(135deg, rgba(249,168,212,0.22), rgba(244,114,182,0.15))",
+    progressBg: "#831843",
+    progressFill: "linear-gradient(90deg, #ec4899, #f9a8d4)",
   },
 
   mint: {
@@ -395,6 +399,203 @@ const THEMES = {
     idolFallback: "linear-gradient(135deg, rgba(45,212,191,0.18), rgba(103,232,249,0.16))",
     progressBg: "#134e4a",
     progressFill: "linear-gradient(90deg, #2dd4bf, #67e8f9)",
+  },
+
+  lavender: {
+    label: "Lavender Dream",
+    pageBg: "linear-gradient(135deg, #1e1b4b, #4c1d95 55%, #c4b5fd)",
+    text: "#f5f3ff",
+    subtext: "#c4b5fd",
+    panel: "rgba(44,26,76,0.82)",
+    panelAlt: "rgba(91,33,182,0.28)",
+    cardBorder: "#a78bfa",
+    cardBorderSoft: "#c4b5fd",
+    button: "#8b5cf6",
+    buttonText: "#f5f3ff",
+    buttonAltBg: "rgba(255,255,255,0.08)",
+    buttonAltText: "#f5f3ff",
+    tabActive: "#c084fc",
+    tabInactive: "rgba(44,26,76,0.62)",
+    idolFallback:
+      "linear-gradient(135deg, rgba(167,139,250,0.20), rgba(192,132,252,0.16))",
+    progressBg: "#4c1d95",
+    progressFill: "linear-gradient(90deg, #a78bfa, #e9d5ff)",
+  },
+
+  sky: {
+    label: "Sky Pop",
+    pageBg: "linear-gradient(135deg, #10243a, #1d4ed8 50%, #7dd3fc)",
+    text: "#eff6ff",
+    subtext: "#bfdbfe",
+    panel: "rgba(16, 36, 58, 0.82)",
+    panelAlt: "rgba(29, 78, 216, 0.32)",
+    cardBorder: "#60a5fa",
+    cardBorderSoft: "#93c5fd",
+    button: "#38bdf8",
+    buttonText: "#082f49",
+    buttonAltBg: "rgba(255,255,255,0.08)",
+    buttonAltText: "#eff6ff",
+    tabActive: "#60a5fa",
+    tabInactive: "rgba(16, 36, 58, 0.62)",
+    idolFallback: "linear-gradient(135deg, rgba(96,165,250,0.2), rgba(125,211,252,0.16))",
+    progressBg: "#1e3a8a",
+    progressFill: "linear-gradient(90deg, #38bdf8, #93c5fd)",
+  },
+  earth: {
+    label: "Earth Tone",
+    pageBg: "linear-gradient(135deg, #1f241d, #4b5d3a 55%, #8a7b5e)",
+    text: "#f5f5dc",
+    subtext: "#d6d3b1",
+    panel: "rgba(40, 48, 34, 0.84)",
+    panelAlt: "rgba(75, 93, 58, 0.52)",
+    cardBorder: "#8a7b5e",
+    cardBorderSoft: "#a89b76",
+    button: "#6b7d4f",
+    buttonText: "#f8faf0",
+    buttonAltBg: "rgba(255,255,255,0.07)",
+    buttonAltText: "#f5f5dc",
+    tabActive: "#a89b76",
+    tabInactive: "rgba(40, 48, 34, 0.62)",
+    idolFallback: "linear-gradient(135deg, rgba(107,125,79,0.2), rgba(168,155,118,0.14))",
+    progressBg: "#4b5d3a",
+    progressFill: "linear-gradient(90deg, #6b7d4f, #a89b76)",
+  },
+
+  obsidian: {
+    label: "Obsidian",
+    pageBg: "linear-gradient(135deg, #050505, #101418 52%, #262c35)",
+    text: "#f5f7fa",
+    subtext: "#aeb8c5",
+    panel: "rgba(14, 18, 24, 0.88)",
+    panelAlt: "rgba(30, 36, 44, 0.7)",
+    cardBorder: "#3b4552",
+    cardBorderSoft: "#576272",
+    button: "#64748b",
+    buttonText: "#f8fafc",
+    buttonAltBg: "rgba(255,255,255,0.06)",
+    buttonAltText: "#f5f7fa",
+    tabActive: "#94a3b8",
+    tabInactive: "rgba(14, 18, 24, 0.7)",
+    idolFallback: "linear-gradient(135deg, rgba(100,116,139,0.18), rgba(51,65,85,0.16))",
+    progressBg: "#1f2937",
+    progressFill: "linear-gradient(90deg, #94a3b8, #cbd5e1)",
+  },
+
+  beige: {
+    label: "Soft Beige",
+    pageBg: "linear-gradient(135deg, #f5efe6, #ede0d1 55%, #d6c2ad)",
+    text: "#3f3124",
+    subtext: "#7c6756",
+    panel: "rgba(255,248,240,0.88)",
+    panelAlt: "rgba(239,226,212,0.88)",
+    cardBorder: "#c8b39f",
+    cardBorderSoft: "#b89c86",
+    button: "#b08968",
+    buttonText: "#fffaf5",
+    buttonAltBg: "rgba(255,255,255,0.58)",
+    buttonAltText: "#3f3124",
+    tabActive: "#c08a5b",
+    tabInactive: "rgba(255,248,240,0.75)",
+    idolFallback: "linear-gradient(135deg, rgba(200,179,159,0.22), rgba(176,137,104,0.12))",
+    progressBg: "#ded0c2",
+    progressFill: "linear-gradient(90deg, #c08a5b, #d6c2ad)",
+  },
+
+  softPink: {
+    label: "Pastel Pink",
+    pageBg: "linear-gradient(135deg, #fdf2f8, #fce7f3 55%, #fbcfe8)",
+    text: "#4a044e",
+    subtext: "#9d174d",
+    panel: "rgba(255, 240, 246, 0.9)",
+    panelAlt: "rgba(252, 231, 243, 0.9)",
+    cardBorder: "#f9a8d4",
+    cardBorderSoft: "#fbcfe8",
+    button: "#f472b6",
+    buttonText: "#ffffff",
+    buttonAltBg: "rgba(255,255,255,0.7)",
+    buttonAltText: "#4a044e",
+    tabActive: "#ec4899",
+    tabInactive: "rgba(252, 231, 243, 0.8)",
+    idolFallback: "linear-gradient(135deg, rgba(251,207,232,0.4), rgba(244,114,182,0.2))",
+    progressBg: "#fce7f3",
+    progressFill: "linear-gradient(90deg, #f472b6, #f9a8d4)",
+  },
+
+  softOrange: {
+    label: "Pastel Orange",
+    pageBg: "linear-gradient(135deg, #fff7ed, #ffedd5 55%, #fed7aa)",
+    text: "#431407",
+    subtext: "#9a3412",
+    panel: "rgba(255, 245, 235, 0.9)",
+    panelAlt: "rgba(255, 237, 213, 0.9)",
+    cardBorder: "#fdba74",
+    cardBorderSoft: "#fed7aa",
+    button: "#fb923c",
+    buttonText: "#ffffff",
+    buttonAltBg: "rgba(255,255,255,0.7)",
+    buttonAltText: "#431407",
+    tabActive: "#f97316",
+    tabInactive: "rgba(255, 237, 213, 0.8)",
+    idolFallback: "linear-gradient(135deg, rgba(254,215,170,0.4), rgba(251,146,60,0.2))",
+    progressBg: "#ffedd5",
+    progressFill: "linear-gradient(90deg, #fb923c, #fdba74)",
+  },
+  softGreen: {
+    label: "Pastel Green",
+    pageBg: "linear-gradient(135deg, #f0fdf4, #dcfce7 55%, #bbf7d0)",
+    text: "#052e16",
+    subtext: "#166534",
+    panel: "rgba(240, 255, 245, 0.9)",
+    panelAlt: "rgba(220, 252, 231, 0.9)",
+    cardBorder: "#86efac",
+    cardBorderSoft: "#bbf7d0",
+    button: "#4ade80",
+    buttonText: "#052e16",
+    buttonAltBg: "rgba(255,255,255,0.7)",
+    buttonAltText: "#052e16",
+    tabActive: "#22c55e",
+    tabInactive: "rgba(220, 252, 231, 0.8)",
+    idolFallback: "linear-gradient(135deg, rgba(187,247,208,0.4), rgba(74,222,128,0.2))",
+    progressBg: "#dcfce7",
+    progressFill: "linear-gradient(90deg, #4ade80, #86efac)",
+  },
+  softBlue: {
+    label: "Pastel Blue",
+    pageBg: "linear-gradient(135deg, #eff6ff, #dbeafe 55%, #bfdbfe)",
+    text: "#1e3a8a",
+    subtext: "#1d4ed8",
+    panel: "rgba(240, 245, 255, 0.9)",
+    panelAlt: "rgba(219, 234, 254, 0.9)",
+    cardBorder: "#93c5fd",
+    cardBorderSoft: "#bfdbfe",
+    button: "#60a5fa",
+    buttonText: "#ffffff",
+    buttonAltBg: "rgba(255,255,255,0.7)",
+    buttonAltText: "#1e3a8a",
+    tabActive: "#3b82f6",
+    tabInactive: "rgba(219, 234, 254, 0.8)",
+    idolFallback: "linear-gradient(135deg, rgba(191,219,254,0.4), rgba(96,165,250,0.2))",
+    progressBg: "#dbeafe",
+    progressFill: "linear-gradient(90deg, #60a5fa, #93c5fd)",
+  },
+  softPurple: {
+    label: "Pastel Purple",
+    pageBg: "linear-gradient(135deg, #faf5ff, #f3e8ff 55%, #e9d5ff)",
+    text: "#3b0764",
+    subtext: "#6b21a8",
+    panel: "rgba(250, 245, 255, 0.9)",
+    panelAlt: "rgba(243, 232, 255, 0.9)",
+    cardBorder: "#d8b4fe",
+    cardBorderSoft: "#e9d5ff",
+    button: "#a78bfa",
+    buttonText: "#ffffff",
+    buttonAltBg: "rgba(255,255,255,0.7)",
+    buttonAltText: "#3b0764",
+    tabActive: "#8b5cf6",
+    tabInactive: "rgba(243, 232, 255, 0.8)",
+    idolFallback: "linear-gradient(135deg, rgba(233,213,255,0.4), rgba(167,139,250,0.2))",
+    progressBg: "#f3e8ff",
+    progressFill: "linear-gradient(90deg, #a78bfa, #d8b4fe)",
   },
 };
 
@@ -740,6 +941,8 @@ export default function App() {
       const nextIndex = (currentIndex + 1) % themeKeys.length;
       return themeKeys[nextIndex];
     });
+
+    playSound(switchSfx, 0.4);
   };
   
   const passiveIncomePerSec = useMemo(() => {
@@ -1110,15 +1313,9 @@ function rarityStyle(name) {
     return () => clearInterval(id);
   }, [equippedLightstick]);
 
-  useEffect(() => {
-    if (floatingIncome.length === 0) return;
-
-    const timer = setTimeout(() => {
-      setFloatingIncome((prev) => prev.slice(1));
-    }, 800); // match your CSS transition
-
-    return () => clearTimeout(timer);
-  }, [floatingIncome]);
+  const removeFloatingIncome = React.useCallback((doneId) => {
+    setFloatingIncome((prev) => prev.filter((fi) => fi.id !== doneId));
+  }, []);
   
   useEffect(() => {
     if (activeReveal) return;
@@ -1356,6 +1553,7 @@ useEffect(() => {
 };
 
   const tapIdol = (idol, event) => {
+  if (!idol?.discovered && idol.discovered !== undefined) return;
   playSound(coinSfx, 0.3);
 
   const bonus = (idol.activeCosmetics || []).reduce(
@@ -1553,7 +1751,7 @@ useEffect(() => {
                   <div style={styles.small}>Queue limit: 20 packs</div>
                 </div>
                 {backpackEntries.length === 0 ? <div style={styles.small}>No packs yet.</div> : backpackEntries.map(([key, pack]) => (
-                  <div key={key} style={{ ...styles.card, marginBottom: 10, background: "rgba(30,41,59,0.55)" }}>
+                  <div key={key} style={{ ...styles.card, marginBottom: 10, background: ui.panelAlt, border: `1px solid ${ui.cardBorder}`, }}>
                     <div style={styles.row}>
                       <div>
                         <div style={{ fontWeight: 700 }}>{pack.group} ×{pack.count}</div>
@@ -1637,7 +1835,7 @@ useEffect(() => {
                             : "0 10px 24px rgba(0,0,0,0.28)"
                           : undefined,
                     }}
-                    onClick={(e) => tapIdol(idol, e)}
+                    onClick={isMissing ? undefined : (e) => tapIdol(idol, e)}
                     onMouseEnter={() => {
                       setHoveredIdolId(idol.id);
                       playHover();
@@ -1917,9 +2115,7 @@ useEffect(() => {
             amount={f.amount} 
             x={f.x} 
             y={f.y} 
-            onDone={(doneId) =>
-              setFloatingIncome((prev) => prev.filter((fi) => fi.id !== doneId))
-            }
+            onDone={removeFloatingIncome}
             />
         ))}
 
@@ -1969,7 +2165,7 @@ useEffect(() => {
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "min(520px, 100%)",
-              background: "linear-gradient(180deg, rgba(15,23,42,0.98), rgba(2,6,23,0.98))",
+              background: ui.panel,
               border: getRarityBorder(activeReveal.rarity),
               borderRadius: 28,
               padding: 24,
@@ -2074,7 +2270,7 @@ useEffect(() => {
                 </div>
                 <div style={{ ...styles.card, marginTop: 12 }}>
                   <h3 style={{ marginTop: 0 }}>Quick Action</h3>
-                  <button style={styles.button} onClick={(e) => tapIdol(selectedIdol, e)}>Tap for Bonus</button>
+                  <button style={styles.button} onClick={isMissing ? undefined : (e) => tapIdol(idol, e)}>Tap for Bonus</button>
                 </div>
               </div>
             </div>
