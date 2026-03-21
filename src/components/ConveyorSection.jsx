@@ -74,7 +74,7 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
             style={{
               ...styles.packCard,
               position: "absolute",
-              top: 18 + (pack.id % 2) * 8,
+              top: 18,
               left: `${leftPct}%`,
               transition: "left 260ms linear, transform 180ms ease, box-shadow 180ms ease",
                 transform: isHovered
