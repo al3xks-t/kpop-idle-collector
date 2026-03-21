@@ -102,6 +102,29 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
               }}
             />
 
+            {pack.isExpress ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: -34,
+                  transform: "rotate(35deg)",
+                  background: "linear-gradient(90deg, #fb7185, #f59e0b)",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: 0.8,
+                  padding: "4px 36px",
+                  boxShadow: "0 8px 18px rgba(0,0,0,0.25)",
+                  zIndex: 6,
+                  pointerEvents: "none",
+                  textTransform: "uppercase",
+                }}
+              >
+                Express
+              </div>
+            ) : null}
+            
             <div
               style={{
                 ...styles.row,
@@ -175,7 +198,7 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
             </div>
             
             <div style={{ ...styles.small, margin: "10px 0", position: "relative", zIndex: 2 }}>
-                        Belt Exit: {Math.max(0, Math.ceil((pack.expiresAt - Date.now()) / 1000))}s
+                        Belt Exit: {Math.max(0, Math.ceil((pack.expiresAt - Date.now()) / 1000))}
                       </div>
             <button
               className="buyButton"

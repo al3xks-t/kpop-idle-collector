@@ -214,7 +214,28 @@ export const COSMETICS = [
   { key: "aura", label: "Stage Aura", tapBonus: 1.75, passiveBonus: 1.75 },
 ];
 
-export const OPEN_TIME_BY_TIER_SEC = [5, 15, 45, 120, 300, 720, 1500, 2700, 4500, 4500, 4500, 4500, 4500, 4500];
+export const SHOP_CONFIG = {
+  offline: {
+    base: 5000,
+    growth: 1.65,
+    minutesPerUpgrade: 15,
+  },
+  queue: {
+    base: 10000,
+    growth: 1.7,
+    slotsPerUpgrade: 2,
+  },
+  manager: {
+    base: 12000,
+    growth: 1.8,
+    speedPerLevel: 0.1,
+  },
+  express: {
+    multiplier: 4,
+  },
+};
+
+export const OPEN_TIME_BY_TIER_SEC = [5, 11, 24, 50, 90, 180, 300, 585, 900, 1800, 2700, 4020, 4500, 5400];
 
 export const MUTATION_VISUALS = {
   Astral: {

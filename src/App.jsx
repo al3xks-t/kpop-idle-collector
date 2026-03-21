@@ -25,6 +25,7 @@ import {
   MUTATION_VISUALS,
   OPEN_TIME_BY_TIER_SEC,
   RARITIES,
+  SHOP_CONFIG
 } from "./data/gameData";
 
 
@@ -71,6 +72,13 @@ const fmt = (n) => {
     i += 1;
   }
   return `${num.toFixed(num < 10 ? 2 : num < 100 ? 1 : 0)}${units[i]}`;
+};
+
+const fmtDuration = (totalSec) => {
+  const safe = Math.max(0, Math.ceil(totalSec));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}m ${seconds}s`;
 };
 
 const now = () => Date.now();
@@ -848,6 +856,7 @@ function mergeOpenedIdols(existing, opened) {
     if (idx === -1) {
       updated.unshift({
         ...newIdol,
+        id: newIdol.id ?? Date.now() + Math.random(),
         level: newIdol.level ?? 1,
         shards: newIdol.shards ?? 1,
         nextLevelNeed: newIdol.nextLevelNeed ?? 2,
@@ -926,6 +935,12 @@ export default function App() {
   const [eventNow, setEventNow] = useState(null);
   const [eventCountdown, setEventCountdown] = useState("");
   const [theme, setTheme] = useState(initialSave?.theme ?? "dark");
+  const [maxQueue, setMaxQueue] = useState(initialSave?.maxQueue ?? 20);
+  const [queueUpgradeLevel, setQueueUpgradeLevel] = useState(initialSave?.queueUpgradeLevel ?? 0);
+  const [managerLevel, setManagerLevel] = useState(initialSave?.managerLevel ?? 0);
+  const [shopNotice, setShopNotice] = useState(null);
+  const [offlineCapMinutes, setOfflineCapMinutes] = useState(initialSave?.offlineCapMinutes ?? 60);
+  const [offlineCapLevel, setOfflineCapLevel] = useState(initialSave?.offlineCapLevel ?? 0);
 
   const ui = THEMES[theme] ?? THEMES.dark;
 
@@ -946,8 +961,106 @@ export default function App() {
   const completedGroups = useMemo(() => getCompletedGroups(collection), [collection]);
   const totalCollectionCount = useMemo(() => getTotalCollectionCount(), []);
   const styles = useMemo(() => getStyles(ui), [ui]);
-
+  const cleanConveyorKeepAll = (packs) => (packs || []).filter((p) => p.expiresAt > now());
   const themeKeys = Object.keys(THEMES);
+
+    const managerSpeedMult = 1 + managerLevel * 0.1;
+    const getQueueUpgradeCost = () =>
+      Math.floor(
+        SHOP_CONFIG.queue.base *
+        Math.pow(SHOP_CONFIG.queue.growth, queueUpgradeLevel)
+      );
+
+    const getManagerUpgradeCost = () =>
+      Math.floor(
+        SHOP_CONFIG.manager.base *
+        Math.pow(SHOP_CONFIG.manager.growth, managerLevel)
+      );
+        Math.floor(12000 * Math.pow(1.8, managerLevel));
+
+    const getExpressDeliveryCost = (groupCost) =>
+      Math.floor(groupCost * SHOP_CONFIG.express.multiplier);
+
+  const showShopMessage = (text) => {
+    setShopNotice(text);
+    setTimeout(() => {
+      setShopNotice((current) => (current === text ? null : current));
+    }, 1800);
+  };
+
+  const buyQueueUpgrade = () => {
+  const cost = getQueueUpgradeCost();
+    if (money < cost) return;
+
+    setMoney((m) => m - cost);
+    setQueueUpgradeLevel((lvl) => lvl + 1);
+    setMaxQueue((q) => q + 2);
+    playSound(buySfx, 0.45);
+    showShopMessage("Queue capacity increased by +2.");
+  };
+
+  const buyManagerUpgrade = () => {
+    const cost = getManagerUpgradeCost();
+    if (money < cost) return;
+
+    setMoney((m) => m - cost);
+    setManagerLevel((lvl) => lvl + 1);
+    playSound(equipSfx, 0.45);
+    showShopMessage("Manager hired. Opening speed increased.");
+  };
+
+  const getOfflineCapUpgradeCost = () =>
+    Math.floor(
+      SHOP_CONFIG.offline.base *
+      Math.pow(SHOP_CONFIG.offline.growth, offlineCapLevel)
+    );
+
+  const buyOfflineCapUpgrade = () => {
+    const cost = getOfflineCapUpgradeCost();
+    if (money < cost) return;
+
+    setMoney((m) => m - cost);
+    setOfflineCapLevel((lvl) => lvl + 1);
+    setOfflineCapMinutes((mins) => mins + 15);
+    playSound(equipSfx, 0.45);
+    showShopMessage("Offline earnings cap increased by 15 minutes.");
+  };
+
+  const createPackForGroup = (group, options = {}) => {
+    const rarity = weightedPick(RARITIES);
+    const mutation = maybeMutation();
+
+    return {
+      id: nextId.current++,
+      group: group.name,
+      tier: group.tier,
+      cost: Math.floor(group.cost * (RARITY_PACK_PRICE_MULT[rarity.name] ?? 1)),
+      rarity: rarity.name,
+      rarityMult: rarity.mult,
+      mutation: mutation?.name ?? null,
+      mutationMult: mutation?.mult ?? 1,
+      packImage: group.packImage ?? null,
+      spawnedAt: now(),
+      expiresAt: now() + CONVEYOR_LIFETIME_MS,
+      isExpress: options.isExpress ?? false,
+    };
+  };
+
+
+  const buyExpressDelivery = (groupName) => {
+    const group = GROUPS.find((g) => g.name === groupName);
+    if (!group) return;
+
+    const fee = getExpressDeliveryCost(group.cost);
+    if (money < fee) return;
+
+    const pack = createPackForGroup(group, { isExpress: true });
+
+    setMoney((m) => m - fee);
+    setConveyor((prev) => [...cleanConveyorKeepAll(prev), pack]);
+    playSound(buySfx, 0.5);
+    showShopMessage(`${group.name} express delivery arrived.`);
+  };
 
   const cycleTheme = () => {
     setTheme((prev) => {
@@ -1171,10 +1284,15 @@ function rarityStyle(name) {
       lastSavedAt: Date.now(),
       showUndiscovered,
       theme,
+      maxQueue,
+      queueUpgradeLevel,
+      managerLevel,
+      offlineCapMinutes,
+      offlineCapLevel,
     };
 
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-  }, [money, tab, conveyor, backpack, opening, collection, equippedLightstick, ownedLightsticks, binderSort, showUndiscovered, theme]);
+  }, [money, tab, conveyor, backpack, opening, collection, equippedLightstick, ownedLightsticks, binderSort, showUndiscovered, theme, maxQueue, queueUpgradeLevel, managerLevel, offlineCapLevel, offlineCapMinutes]);
 
   useEffect(() => {
     if (!initialSave?.lastSavedAt) return;
@@ -1193,7 +1311,8 @@ function rarityStyle(name) {
       return sum + getEffectiveIdolIncome(idol, completed) * (1 + bonus);
     }, 0);
 
-    const capSeconds = 60 * 60 * 8;
+    const savedOfflineCapMinutes = initialSave?.offlineCapMinutes ?? 60;
+    const capSeconds = 60 * savedOfflineCapMinutes;
     const payoutSeconds = Math.min(elapsedSec, capSeconds);
     const offlineIncome = passivePerSec * payoutSeconds;
 
@@ -1299,7 +1418,7 @@ function rarityStyle(name) {
 
       for (const pack of currentOpening) {
         const deltaSec = (current - pack.lastProgressAt) / 1000;
-        const speed = pack.group === equippedLightstick ? 2 : 1;
+        const speed = (pack.group === equippedLightstick ? 2 : 1) * managerSpeedMult;
         const progressGain = (deltaSec / pack.baseSec) * speed;
 
         const updatedPack = {
@@ -1325,7 +1444,7 @@ function rarityStyle(name) {
     }, 500);
 
     return () => clearInterval(id);
-  }, [equippedLightstick]);
+  }, [equippedLightstick, managerSpeedMult]);
 
   const removeFloatingIncome = React.useCallback((doneId) => {
     setFloatingIncome((prev) => prev.filter((fi) => fi.id !== doneId));
@@ -1483,7 +1602,10 @@ useEffect(() => {
 
   const queuePack = (key) => {
     const pack = backpack[key];
-    if (!pack || pack.count <= 0 || opening.length >= 20) return;
+    if (openingRef.current.length >= maxQueue) {
+      showShopMessage("Opening queue is full.");
+      return;
+    }
 
     const group = GROUPS.find((g) => g.name === pack.group);
     const baseSec = OPEN_TIME_BY_TIER_SEC[group.tier - 1] || 4500;
@@ -1556,15 +1678,21 @@ useEffect(() => {
     };
   };
 
-  const toggleFavorite = (idolId) => {
-  setCollection((prev) =>
-    prev.map((idol) =>
-      idol.id === idolId
-        ? { ...idol, isFavorite: !idol.isFavorite }
-        : idol
-    )
-  );
-};
+  const toggleFavorite = (targetIdol) => {
+    setCollection((prev) =>
+      prev.map((idol) =>
+        idol.group === targetIdol.group && idol.name === targetIdol.name
+          ? { ...idol, isFavorite: !idol.isFavorite }
+          : idol
+      )
+    );
+
+    setSelectedIdol((prev) =>
+      prev && prev.group === targetIdol.group && prev.name === targetIdol.name
+        ? { ...prev, isFavorite: !prev.isFavorite }
+        : prev
+    );
+  };
 
   const tapIdol = (idol, event) => {
   if (!idol?.discovered && idol.discovered !== undefined) return;
@@ -1670,7 +1798,7 @@ useEffect(() => {
           </div>
           <div style={styles.card}>
             <div style={styles.small}>Opening Queue</div>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>{opening.length}/20</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{opening.length}/{maxQueue}</div>
           </div>
           <div style={styles.card}>
             <div style={styles.small}>Lightstick</div>
@@ -1692,7 +1820,11 @@ useEffect(() => {
           <div style={{ ...styles.card, marginBottom: 16, borderColor: "#0ea5e9" }}>
             <div style={{ fontWeight: 800, fontSize: 18 }}>Offline earnings collected</div>
             <div style={{ marginTop: 4 }}>
-              You earned <b>${fmt(offlineNotice.income)}</b> over {Math.floor(offlineNotice.seconds / 60)}m {offlineNotice.seconds % 60}s away.
+              You earned <b>${fmt(offlineNotice.income)}</b> over{" "}
+              {Math.floor(offlineNotice.seconds / 60)}m {offlineNotice.seconds % 60}s away.
+            </div>
+            <div style={{ ...styles.small, marginTop: 6 }}>
+              Current offline cap: {offlineCapMinutes} minutes
             </div>
           </div>
         ) : null}
@@ -1736,9 +1868,9 @@ useEffect(() => {
         ) : null}
 
         <div style={styles.tabs}>
-          {["conveyor", "binder", "sets", ...(debugMode ? ["debug"] : [])].map((name) => (
+          {["conveyor", "shop", "binder", "sets", ...(debugMode ? ["debug"] : [])].map((name) => (
             <button key={name} style={styles.tabBtn(tab === name)} onClick={() => setTab(name)}>
-              {name === "binder" ? "Collection Binder" : name[0].toUpperCase() + name.slice(1)}
+              {name === "binder" ? "Collection Binder" : name === "shop" ? "Shop": name[0].toUpperCase() + name.slice(1)}
             </button>
           ))}
         </div>
@@ -1762,7 +1894,7 @@ useEffect(() => {
               <div style={styles.card}>
                 <div style={styles.row}>
                   <h2 style={{ marginTop: 0, color: ui.text }}>Backpack</h2>
-                  <div style={styles.small}>Queue limit: 20 packs</div>
+                  <div style={styles.small}>Queue limit: {maxQueue} packs</div>
                 </div>
                 {backpackEntries.length === 0 ? <div style={styles.small}>No packs yet.</div> : backpackEntries.map(([key, pack]) => (
                   <div key={key} style={{ ...styles.card, marginBottom: 10, background: ui.panelAlt, border: `1px solid ${ui.cardBorder}`, }}>
@@ -1787,7 +1919,7 @@ useEffect(() => {
                 </div>
                 {opening.length === 0 ? <div style={styles.small}>No packs opening.</div> : opening.map((pack) => {
                   const pct = pack.progress * 100;
-                  const speed = pack.group === equippedLightstick ? 2 : 1;
+                  const speed = (pack.group === equippedLightstick ? 2 : 1) * managerSpeedMult;
                   const remainingSec = Math.ceil((1 - pack.progress) * pack.baseSec / speed);
                   return (
                     <div key={pack.id} style={{ marginBottom: 12 }}>
@@ -1797,7 +1929,7 @@ useEffect(() => {
                           <div style={styles.small}>{pack.rarity}{pack.mutation ? ` • ${pack.mutation}` : ""}</div>
                         </div>
                         <div>
-                          {remainingSec}s {speed > 1 ? <span style={styles.small}>⚡ boosted</span> : null}
+                          {fmtDuration(remainingSec)} {speed > 1 ? <span style={styles.small}>⚡ boosted</span> : null}
                         </div>
                       </div>
                       <div style={{ marginTop: 6 }}>{progressBar(pct, ui)}</div>
@@ -1828,7 +1960,7 @@ useEffect(() => {
 
                 return (
                   <div
-                    key={idol.id}
+                    key={`${idol.group}|||${idol.name}`}
                     style={{
                       ...styles.packCard,
                     
@@ -1920,7 +2052,7 @@ useEffect(() => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            toggleFavorite(idol.id);
+                            toggleFavorite(idol);
                           }}
                           style={{
                             position: "absolute",
@@ -1988,6 +2120,136 @@ useEffect(() => {
                   )}</div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {tab === "shop" && (
+          <div style={styles.grid2}>
+            <div style={styles.card}>
+              <div style={styles.row}>
+                <h2 style={{ marginTop: 0, color: ui.text }}>Upgrades</h2>
+                <div style={styles.small}>Permanent account upgrades</div>
+              </div>
+
+              <div style={{ ...styles.card, marginTop: 12, background: ui.panelAlt }}>
+                <div style={styles.row}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>Offline Storage</div>
+                    <div style={styles.small}>
+                      Increase max offline earnings time by +15 minutes each purchase.
+                    </div>
+                    <div style={{ ...styles.small, marginTop: 6 }}>
+                      Current cap: <b>{offlineCapMinutes} minutes</b> • Level <b>{offlineCapLevel}</b>
+                    </div>
+                  </div>
+
+                  <button
+                    style={styles.button}
+                    disabled={money < getOfflineCapUpgradeCost()}
+                    onClick={buyOfflineCapUpgrade}
+                  >
+                    Upgrade (${fmt(getOfflineCapUpgradeCost())})
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ ...styles.card, marginTop: 12, background: ui.panelAlt }}>
+                <div style={styles.row}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>Queue Slot Expansion</div>
+                    <div style={styles.small}>
+                      Increase opening queue by +2 slots each purchase.
+                    </div>
+                    <div style={{ ...styles.small, marginTop: 6 }}>
+                      Current max queue: <b>{maxQueue}</b> • Level <b>{queueUpgradeLevel}</b>
+                    </div>
+                  </div>
+
+                  <button
+                    style={styles.button}
+                    disabled={money < getQueueUpgradeCost()}
+                    onClick={buyQueueUpgrade}
+                  >
+                    Buy (${fmt(getQueueUpgradeCost())})
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ ...styles.card, marginTop: 12, background: ui.panelAlt }}>
+                <div style={styles.row}>
+                  <div>
+                    <div style={{ fontWeight: 800 }}>Manager System</div>
+                    <div style={styles.small}>
+                      Boost all pack opening speed by +10% per level.
+                    </div>
+                    <div style={{ ...styles.small, marginTop: 6 }}>
+                      Current bonus: <b>+{Math.round((managerSpeedMult - 1) * 100)}%</b> • Level <b>{managerLevel}</b>
+                    </div>
+                  </div>
+
+                  <button
+                    style={styles.button}
+                    disabled={money < getManagerUpgradeCost()}
+                    onClick={buyManagerUpgrade}
+                  >
+                    Hire (${fmt(getManagerUpgradeCost())})
+                  </button>
+                </div>
+              </div>
+
+              {shopNotice ? (
+                <div style={{ ...styles.small, marginTop: 12, color: ui.incomeText }}>
+                  {shopNotice}
+                </div>
+              ) : null}
+            </div>
+            
+            <div style={styles.card}>
+              <div style={styles.row}>
+                <h2 style={{ marginTop: 0, color: ui.text }}>Express Delivery</h2>
+                <div style={styles.small}>
+                  Force-deliver a target group pack, even if the conveyor is full.
+                </div>
+              </div>
+            
+              <div style={{ ...styles.small, marginBottom: 12 }}>
+                Delivery fee is 4× base pack price. You still need to buy the delivered pack after it arrives.
+              </div>
+            
+              <div style={{ display: "grid", gap: 10 }}>
+                {GROUPS.map((group) => {
+                  const fee = getExpressDeliveryCost(group.cost);
+                
+                  return (
+                    <div
+                      key={group.name}
+                      style={{
+                        ...styles.card,
+                        background: ui.panelAlt,
+                        padding: 12,
+                      }}
+                    >
+                      <div style={styles.row}>
+                        <div>
+                          <div style={{ fontWeight: 800 }}>{group.name}</div>
+                          <div style={styles.small}>
+                            Tier {group.tier} • Delivery Fee: ${fmt(fee)}
+                          </div>
+                        </div>
+                    
+                        <button
+                          style={styles.button}
+                          disabled={money < fee}
+                          onClick={() => buyExpressDelivery(group.name)}
+                        >
+                          Deliver
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -2284,7 +2546,12 @@ useEffect(() => {
                 </div>
                 <div style={{ ...styles.card, marginTop: 12 }}>
                   <h3 style={{ marginTop: 0 }}>Quick Action</h3>
-                  <button style={styles.button} onClick={isMissing ? undefined : (e) => tapIdol(idol, e)}>Tap for Bonus</button>
+                  <button
+                    style={styles.button}
+                    onClick={(e) => tapIdol(selectedIdol, e)}
+                  >
+                    Tap for Bonus
+                  </button>
                 </div>
               </div>
             </div>
