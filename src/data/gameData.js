@@ -3,7 +3,7 @@ export const GROUPS = [
     tier: 1,
     name: "BlackPink",
     cost: 100,
-    packImage: null,
+    packImage: "/images/packs/blackpink.png",
     members: [
       { name: "Jisoo", weight: 62, image: "/images/idols/blackpink/jisoo.jpg" },
       { name: "Rosé", weight: 25, image: "/images/idols/blackpink/rose.jpg" },
@@ -15,7 +15,7 @@ export const GROUPS = [
     tier: 2,
     name: "Red Velvet",
     cost: 1000,
-    packImage: null,
+    packImage: "/images/packs/redvelvet.jpg",
     members: [
       { name: "Yeri", weight: 58, image: "/images/idols/redvelvet/yeri.jpg" },
       { name: "Wendy", weight: 25, image: "/images/idols/redvelvet/wendy.jpg" },
@@ -28,7 +28,7 @@ export const GROUPS = [
     tier: 3,
     name: "Twice",
     cost: 9800,
-    packImage: null,
+    packImage: "/images/packs/twice.jpg",
     members: [
       { name: "Nayeon", weight: 30, image: "/images/idols/twice/nayeon.jpg" },
       { name: "Jeongyeon", weight: 22, image: "/images/idols/twice/jeongyeon.jpg" },
@@ -45,7 +45,7 @@ export const GROUPS = [
     tier: 4,
     name: "G-IDLE",
     cost: 94100,
-    packImage: null,
+    packImage: "/images/packs/gidle.png",
     members: [
       { name: "Shuhua", weight: 58, image: "/images/idols/gidle/shuhua.jpg" },
       { name: "Minnie", weight: 25, image: "/images/idols/gidle/minnie.jpg" },
@@ -58,7 +58,7 @@ export const GROUPS = [
     tier: 5,
     name: "fromis_9",
     cost: 884400,
-    packImage: null,
+    packImage: "/images/packs/fromis9.png",
     members: [
       { name: "Jisun", weight: 30, image: "/images/idols/fromis/jisun.jpg" },
       { name: "Gyuri", weight: 22, image: "/images/idols/fromis/gyuri.jpg" },
@@ -75,7 +75,7 @@ export const GROUPS = [
     tier: 6,
     name: "ITZY",
     cost: 8140000,
-    packImage: null,
+    packImage: "/images/packs/itzy.png",
     members: [
       { name: "Lia", weight: 58, image: "/images/idols/itzy/lia.jpg" },
       { name: "Chaeryeong", weight: 25, image: "/images/idols/itzy/chaeryeong.jpg" },
@@ -88,7 +88,7 @@ export const GROUPS = [
     tier: 7,
     name: "NMIXX",
     cost: 73200000,
-    packImage: null,
+    packImage: "/images/packs/nmixx.jpg",
     members: [
       { name: "Jiwoo", weight: 49, image: "/images/idols/nmixx/jiwoo.jpg" },
       { name: "Kyujin", weight: 25, image: "/images/idols/nmixx/kyujin.jpg" },
@@ -102,7 +102,7 @@ export const GROUPS = [
     tier: 8,
     name: "MEOVV",
     cost: 644400000,
-    packImage: null,
+    packImage: "/images/packs/meovv.jpg",
     members: [
       { name: "Narin", weight: 58, image: "/images/idols/meovv/narin.jpg" },
       { name: "Ella", weight: 25, image: "/images/idols/meovv/ella.jpg" },
@@ -115,7 +115,7 @@ export const GROUPS = [
     tier: 9,
     name: "BABYMONSTER",
     cost: 5540000000,
-    packImage: null,
+    packImage: "/images/packs/babymonster.jpg",
     members: [
       { name: "Pharita", weight: 41, image: "/images/idols/babymonster/pharita.jpg" },
       { name: "Rami", weight: 25, image: "/images/idols/babymonster/rami.jpg" },
@@ -130,7 +130,7 @@ export const GROUPS = [
     tier: 10,
     name: "IVE",
     cost: 46500000000,
-    packImage: null,
+    packImage: "/images/packs/ive.jpg",
     members: [
       { name: "Gaeul", weight: 49, image: "/images/idols/ive/gaeul.jpg" },
       { name: "Liz", weight: 25, image: "/images/idols/ive/liz.jpg" },
@@ -144,7 +144,7 @@ export const GROUPS = [
     tier: 11,
     name: "aespa",
     cost: 381700000000,
-    packImage: null,
+    packImage: "/images/packs/aespa.jpg",
     members: [
       { name: "Giselle", weight: 62, image: "/images/idols/aespa/giselle.jpg" },
       { name: "Ningning", weight: 25, image: "/images/idols/aespa/ningning.jpg" },
@@ -156,7 +156,7 @@ export const GROUPS = [
     tier: 12,
     name: "ILLIT",
     cost: 3050000000000,
-    packImage: null,
+    packImage: "/images/packs/illit.jpg",
     members: [
       { name: "Wonhee", weight: 58, image: "/images/idols/illit/wonhee.jpg" },
       { name: "Iroha", weight: 25, image: "/images/idols/illit/iroha.jpg" },
@@ -169,7 +169,7 @@ export const GROUPS = [
     tier: 13,
     name: "NewJeans",
     cost: 23800000000000,
-    packImage: null,
+    packImage: "/images/packs/newjeans.jpg",
     members: [
       { name: "Minji", weight: 58, image: "/images/idols/njz/minji.jpg" },
       { name: "Hyein", weight: 25, image: "/images/idols/njz/hyein.jpg" },
@@ -182,7 +182,7 @@ export const GROUPS = [
     tier: 14,
     name: "LE SSERAFIM",
     cost: 181000000000000,
-    packImage: null,
+    packImage: "/images/packs/lesserafim.jpg",
     members: [
       { name: "Yunjin", weight: 58, image: "/images/idols/lesserafim/yunjin.jpg" },
       { name: "Eunchae", weight: 25, image: "/images/idols/lesserafim/eunchae.jpg" },
