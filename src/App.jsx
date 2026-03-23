@@ -62,20 +62,51 @@ const CONVEYOR_MAX = 7;
 const CONVEYOR_LIFETIME_MS = 35000;
 const REVEAL_DURATION_MS = 2200;
 
-const fmt = (n) => {
+const sanitizeIdol = (idol) => ({
+  ...idol,
+  incomePerSec: safeNumber(idol?.incomePerSec, 0),
+  baseIncomePerSec: safeNumber(idol?.baseIncomePerSec, 0),
+  level: safeNumber(idol?.level, 1),
+  shards: safeNumber(idol?.shards, 1),
+  nextLevelNeed: safeNumber(idol?.nextLevelNeed, 2),
+ });
+
+ const sanitizeSave = (save) => {
+  if (!save) return null;
+
+  return {
+    ...save,
+    money: safeNumber(save.money, 1000),
+    collection: Array.isArray(save.collection) ? save.collection.map(sanitizeIdol) : [],
+    opening: Array.isArray(save.opening) ? save.opening : [],
+    conveyor: Array.isArray(save.conveyor) ? save.conveyor : [],
+   };
+ };
+
+const safeNumber = (value, fallback = 0) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const fmt = (value) => {
+  const n = safeNumber(value, 0);
+
   if (n < 1000) return Math.floor(n).toString();
+
   const units = ["K", "M", "B", "T", "Qa", "Qi", "Sx"];
   let num = n;
   let i = -1;
+
   while (num >= 1000 && i < units.length - 1) {
     num /= 1000;
     i += 1;
   }
+
   return `${num.toFixed(num < 10 ? 2 : num < 100 ? 1 : 0)}${units[i]}`;
 };
 
 const fmtDuration = (totalSec) => {
-  const safe = Math.max(0, Math.ceil(totalSec));
+  const safe = Math.max(0, Math.ceil(safeNumber(totalSec, 0)));
   const minutes = Math.floor(safe / 60);
   const seconds = safe % 60;
   return `${minutes}m ${seconds}s`;
@@ -323,7 +354,7 @@ const getSetBonusMultiplier = (groupName, completedGroups) =>
   completedGroups.has(groupName) ? 1 + SET_BONUS_PER_COMPLETE : 1;
 
 const getEffectiveIdolIncome = (idol, completedGroups) =>
-  idol.incomePerSec * getSetBonusMultiplier(idol.group, completedGroups);
+  safeNumber(idol?.incomePerSec, 0) * safeNumber(getSetBonusMultiplier(idol.group, completedGroups), 1);
 
 const getTotalCollectionCount = () =>
   GROUPS.reduce((sum, group) => sum + group.members.length, 0);
@@ -921,7 +952,7 @@ export default function App() {
   };
 
   const [debugMode, setDebugMode] = useState(true);
-  const initialSave = loadSave();
+  const initialSave = sanitizeSave(loadSave());
   const [lastUpdateAt, setLastUpdateAt] = useState(Date.now());
   const [money, setMoney] = useState(initialSave?.money ?? 1000);
   const [tab, setTab] = useState(initialSave?.tab ?? "conveyor");
@@ -986,7 +1017,7 @@ export default function App() {
 
     const getExpressDeliveryCost = (groupCost) =>
       Math.floor(groupCost * SHOP_CONFIG.express.multiplier);
-
+    
   const showShopMessage = (text) => {
     setShopNotice(text);
     setTimeout(() => {
@@ -1083,11 +1114,11 @@ export default function App() {
 
     return collection.reduce((sum, idol) => {
       const bonus = (idol.activeCosmetics || []).reduce(
-        (acc, c) => acc + (c.activeUntil > current ? c.passiveBonus : 0),
+        (acc, c) => acc + (c.activeUntil > current ? safeNumber(c.passiveBonus, 0) : 0),
         0
       );
 
-      return sum + getEffectiveIdolIncome(idol, completedGroups) * (1 + bonus);
+      return sum + safeNumber(getEffectiveIdolIncome(idol, completedGroups), 0) * (1 + bonus);
     }, 0);
   }, [collection, completedGroups]);
 
@@ -1770,7 +1801,11 @@ useEffect(() => {
   const openPack = (pack) => {
     const group = GROUPS.find((g) => g.name === pack.group);
     const member = weightedPick(group.members, "weight");
-    const finalIncome = getMemberValue(group, member) * pack.rarityMult * pack.mutationMult;
+
+    const finalIncome = safeNumber(
+      getMemberValue(group, member) * safeNumber(pack.rarityMult, 1) * safeNumber(pack.mutationMult, 1),
+      0
+    );
 
     return {
       id: nextId.current++,
@@ -1900,9 +1935,9 @@ useEffect(() => {
         <div style={{...styles.statsGrid, marginTop: 14}}>
           <div style={styles.card}>
             <div style={styles.small}>Balance</div>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>${fmt(money)}</div>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>${fmt(safeNumber(money, 0))}</div>
             <div style={{ ...styles.small, marginTop: 6, color: ui.incomeText }}>
-              +${fmt(passiveIncomePerSec)}/s
+              +${fmt(safeNumber(passiveIncomePerSec, 0))}/s
             </div>
           </div>
           <div style={styles.card}>
@@ -2056,7 +2091,7 @@ useEffect(() => {
                             Trash x5
                           </button>
                         ) : null}
-                      
+
                         {pack.count >= 10 ? (
                           <button
                             style={styles.buttonAlt}
@@ -2638,7 +2673,7 @@ useEffect(() => {
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 16, position: "relative", zIndex: 2 }}>
               <span style={rarityStyle(activeReveal.rarity)}>{activeReveal.rarity}</span>
               {activeReveal.mutation ? <span style={mutationStyle(activeReveal.mutation)}>{activeReveal.mutation}</span> : null}
-              <span style={styles.pill("#0f766e")}>${fmt(activeReveal.incomePerSec)}/s</span>
+              <span style={styles.pill("#0f766e")}>${fmt(safeNumber(activeReveal?.incomePerSec, 0))}/s</span>
             </div>
             {revealQueue.length > 0 && (
               <div
