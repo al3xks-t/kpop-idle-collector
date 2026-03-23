@@ -1609,6 +1609,108 @@ useEffect(() => {
     }));
     setConveyor((prev) => prev.filter((p) => p.id !== pack.id));
   };
+  const skipAllReveals = () => {
+    const idolsToMerge = [
+      ...(activeReveal ? [activeReveal] : []),
+      ...revealQueue,
+    ];
+
+    if (idolsToMerge.length === 0) return;
+
+    setCollection((old) => mergeOpenedIdols(old, idolsToMerge));
+    setActiveReveal(null);
+    setRevealQueue([]);
+  };
+  const queuePackMultiple = (key, amount) => {
+    const pack = backpack[key];
+    if (!pack) return;
+
+    const available = pack.count ?? 0;
+    if (available < amount) return;
+
+    const freeSlots = maxQueue - openingRef.current.length;
+    if (freeSlots < amount) {
+      showShopMessage(`Need ${amount} free queue slots.`);
+      return;
+    }
+
+    const baseSec = OPEN_TIME_BY_TIER_SEC[pack.tier - 1] || 4500;
+
+    const queuedPacks = Array.from({ length: amount }, () => ({
+      id: nextId.current++,
+      group: pack.group,
+      tier: pack.tier,
+      cost: pack.cost,
+      rarity: pack.rarity,
+      mutation: pack.mutation,
+      packImage: pack.packImage ?? null,
+      baseSec,
+      progress: 0,
+      lastProgressAt: now(),
+    }));
+
+    setOpening((prev) => {
+      const next = [...prev, ...queuedPacks];
+      openingRef.current = next;
+      return next;
+    });
+
+    setBackpack((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+
+      const nextCount = current.count - amount;
+      if (nextCount <= 0) {
+        const clone = { ...prev };
+        delete clone[key];
+        return clone;
+      }
+
+      return {
+        ...prev,
+        [key]: {
+          ...current,
+          count: nextCount,
+        },
+      };
+    });
+
+    playSound(buySfx, 0.4);
+  };
+
+  const trashPackMultiple = (key, amount) => {
+    const pack = backpack[key];
+    if (!pack) return;
+
+    const available = pack.count ?? 0;
+    if (available < amount) return;
+
+    const refund = pack.cost * 0.3 * amount;
+
+    setMoney((m) => m + refund);
+
+    setBackpack((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+
+      const nextCount = current.count - amount;
+      if (nextCount <= 0) {
+        const clone = { ...prev };
+        delete clone[key];
+        return clone;
+      }
+
+      return {
+        ...prev,
+        [key]: {
+          ...current,
+          count: nextCount,
+        },
+      };
+    });
+
+    playSound(trashSfx, 0.4);
+  };
 
   const queuePack = (key) => {
     const pack = backpack[key];
@@ -1779,6 +1881,7 @@ useEffect(() => {
 
   const backpackEntries = Object.entries(backpack).filter(([, pack]) => pack.count > 0);
   const eventColor = eventNow ? EVENT_COLORS[eventNow.mutation] : "#64748b";
+  const freeQueueSlots = maxQueue - opening.length;
 
   return (
     <div style={styles.page}>
@@ -1913,9 +2016,55 @@ useEffect(() => {
                         <div style={{ fontWeight: 700 }}>{pack.group} ×{pack.count}</div>
                         <div style={styles.small}>{pack.rarity}{pack.mutation ? ` • ${pack.mutation}` : ""}</div>
                       </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button style={styles.button} onClick={() => queuePack(key)}>Open</button>
-                        <button style={styles.buttonAlt} onClick={() => trashPack(key)}>Trash</button>
+                    
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                        
+                        
+                        <button style={styles.button} onClick={() => queuePack(key)}>
+                          Open
+                        </button>
+                        
+                        {pack.count >= 5 ? (
+                          <button
+                            style={styles.button}
+                            disabled={freeQueueSlots < 5}
+                            onClick={() => queuePackMultiple(key, 5)}
+                          >
+                            Open x5
+                          </button>
+                        ) : null}
+
+                        {pack.count >= 10 ? (
+                          <button
+                            style={styles.button}
+                            disabled={freeQueueSlots < 10}
+                            onClick={() => queuePackMultiple(key, 10)}
+                          >
+                            Open x10
+                          </button>
+                        ) : null}
+
+                        <button style={styles.buttonAlt} onClick={() => trashPack(key)}>
+                          Trash
+                        </button>
+
+                         {pack.count >= 5 ? (
+                          <button
+                            style={styles.buttonAlt}
+                            onClick={() => trashPackMultiple(key, 5)}
+                          >
+                            Trash x5
+                          </button>
+                        ) : null}
+                      
+                        {pack.count >= 10 ? (
+                          <button
+                            style={styles.buttonAlt}
+                            onClick={() => trashPackMultiple(key, 10)}
+                          >
+                            Trash x10
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -2491,6 +2640,22 @@ useEffect(() => {
               {activeReveal.mutation ? <span style={mutationStyle(activeReveal.mutation)}>{activeReveal.mutation}</span> : null}
               <span style={styles.pill("#0f766e")}>${fmt(activeReveal.incomePerSec)}/s</span>
             </div>
+            {revealQueue.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  marginTop: 16,
+                }}
+              >
+                <button
+                  style={styles.buttonAlt}
+                  onClick={skipAllReveals}
+                >
+                  Skip All ({revealQueue.length + 1})
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
