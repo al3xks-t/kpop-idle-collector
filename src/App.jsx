@@ -269,8 +269,14 @@ const getSpawnWeights = (playerTier) => {
   });
 };
 
-const cleanConveyor = (packs) =>
-  (packs || []).filter((p) => p.expiresAt > now()).slice(-CONVEYOR_MAX);
+const cleanConveyor = (packs = []) => {
+  const active = packs.filter((p) => p.expiresAt > now());
+
+  const express = active.filter((p) => p.isExpress);
+  const natural = active.filter((p) => !p.isExpress).slice(-CONVEYOR_MAX);
+
+  return [...natural, ...express];
+};
 
 const cleanOpening = (packs = []) =>
   packs.filter((p) => {
@@ -1354,7 +1360,9 @@ function rarityStyle(name) {
     const spawnPack = () => {
       setConveyor((prev) => {
         const current = cleanConveyor(prev);
-        if (current.length >= CONVEYOR_MAX) return current;
+        const naturalCount = current.filter((p) => !p.isExpress).length;
+
+        if (naturalCount >= CONVEYOR_MAX) return current;
 
         const chosen = weightedPick(spawnWeights, "weight").group;
         const rarity = weightedPick(RARITIES, "weight");
@@ -1374,13 +1382,15 @@ function rarityStyle(name) {
           expiresAt: Date.now() + CONVEYOR_LIFETIME_MS,
         };
 
-        return [...current, newPack].slice(-CONVEYOR_MAX);
+        return [...current, newPack];
       });
     };
 
     setConveyor((prev) => {
       const current = cleanConveyor(prev);
-      if (current.length === 0) {
+      const naturalCount = current.filter((p) => !p.isExpress).length;
+
+      if (naturalCount === 0) {
         const chosen = weightedPick(spawnWeights, "weight").group;
         const rarity = weightedPick(RARITIES, "weight");
         const mutation = maybeMutation();
