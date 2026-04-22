@@ -2032,22 +2032,25 @@ useEffect(() => {
   };
 
   const skipAllReveals = () => {
-    const allReveals = [
+    const queuedSpecialReveals = revealQueue.filter((idol) =>
+      isSpecialReveal(idol, collection)
+    );
+  
+    const queuedNormalReveals = revealQueue.filter(
+      (idol) => !isSpecialReveal(idol, collection)
+    );
+  
+    const revealsToMerge = [
       ...(activeReveal ? [activeReveal] : []),
-      ...revealQueue,
+      ...queuedNormalReveals,
     ];
-
-    if (allReveals.length === 0) return;
-
-    const specialReveals = allReveals.filter((idol) => isSpecialReveal(idol, collection));
-    const normalReveals = allReveals.filter((idol) => !isSpecialReveal(idol, collection));
-
-    if (normalReveals.length > 0) {
-      setCollection((old) => mergeOpenedIdols(old, normalReveals));
+  
+    if (revealsToMerge.length > 0) {
+      setCollection((old) => mergeOpenedIdols(old, revealsToMerge));
     }
-
+  
     setActiveReveal(null);
-    setRevealQueue(specialReveals);
+    setRevealQueue(queuedSpecialReveals);
     setRevealLockedUntil(0);
   };
 
