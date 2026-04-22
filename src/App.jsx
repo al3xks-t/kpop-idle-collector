@@ -350,7 +350,7 @@ const weightedPick = (items, weightKey = "weight") => {
 };
 
 const rollCardType = (isExpress = false) => {
-  const chance = isExpress ? 0.003 : 0.01; // 0.3% vs 1%
+  const chance = isExpress ? 0.0005 : 0.005; // 0.3% vs 1%
   return Math.random() < chance ? "group" : "member";
 };
 
