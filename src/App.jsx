@@ -349,8 +349,9 @@ const weightedPick = (items, weightKey = "weight") => {
   return items[items.length - 1];
 };
 
-const rollCardType = () => {
-  return Math.random() < 0.01 ? "group" : "member";
+const rollCardType = (isExpress = false) => {
+  const chance = isExpress ? 0.003 : 0.01; // 0.3% vs 1%
+  return Math.random() < chance ? "group" : "member";
 };
 
 const maybeMutation = () => {
@@ -1223,6 +1224,7 @@ export default function App() {
       spawnedAt: now(),
       expiresAt: now() + CONVEYOR_LIFETIME_MS,
       isExpress: options.isExpress ?? false,
+      cardType: rollCardType(true),
     };
   };
 
