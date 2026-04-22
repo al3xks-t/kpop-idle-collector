@@ -1169,7 +1169,7 @@ export default function App() {
 
     setMoney((m) => m - cost);
     setManagerLevel((lvl) => lvl + 1);
-    playSound(equipSfx, 0.45);
+    playSound(buySfx, 0.45);
     showShopMessage("Manager hired. Opening speed increased.");
   };
 
@@ -1186,7 +1186,7 @@ export default function App() {
     setMoney((m) => m - cost);
     setOfflineCapLevel((lvl) => lvl + 1);
     setOfflineCapMinutes((mins) => mins + 15);
-    playSound(equipSfx, 0.45);
+    playSound(buySfx, 0.45);
     showShopMessage("Offline earnings cap increased by 15 minutes.");
   };
 
@@ -2672,6 +2672,7 @@ useEffect(() => {
                         );
                       }
                       setSelectedIdol(idol);
+                      playSound(equipSfx, 0.45)
                     }}
                   >
                     <div
@@ -3245,7 +3246,7 @@ useEffect(() => {
       ) : null}
 
       {selectedIdol ? (
-        <div style={styles.modalBg} onClick={() => setSelectedIdol(null)}>
+        <div style={styles.modalBg} onClick={() => setSelectedIdol(null)}>  
           <div
             style={{ ...styles.modal, border: getRarityBorder(selectedIdol.rarity) }}
             onClick={(e) => e.stopPropagation()}
@@ -3367,6 +3368,7 @@ useEffect(() => {
                           onClick={() => {
                             if (!unlocked) return;
                             setIdolVariant(selectedIdol, safeVariantKey);
+                            playSound(equipSfx, 0.4)
                           }}
                           style={{
                             ...styles.card,
