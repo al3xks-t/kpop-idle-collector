@@ -999,35 +999,52 @@ function mergeOpenedIdols(existing, opened) {
   let updated = [...existing];
 
   for (const newIdol of opened) {
-    const idx = updated.findIndex((i) => i.name === newIdol.name && i.group === newIdol.group);
+    const idx = updated.findIndex(
+      (i) =>
+        i.name === newIdol.name &&
+        i.group === newIdol.group &&
+        (i.cardType || "member") === (newIdol.cardType || "member")
+    );
 
     if (idx === -1) {
       updated.unshift({
-      ...newIdol,
-      id: newIdol.id ?? Date.now() + Math.random(),
-      level: newIdol.level ?? 1,
-      shards: newIdol.shards ?? 1,
-      nextLevelNeed: newIdol.nextLevelNeed ?? 2,
-      baseIncomePerSec: newIdol.baseIncomePerSec ?? newIdol.incomePerSec,
-      isNew: true,
-      isFavorite: false,
-      variant: newIdol.variant || "default",
-      unlockedVariants: newIdol.unlockedVariants?.length ? newIdol.unlockedVariants : ["default"],
-    });
+        ...newIdol,
+        id: newIdol.id ?? Date.now() + Math.random(),
+        level: newIdol.level ?? 1,
+        shards: newIdol.shards ?? 1,
+        nextLevelNeed: newIdol.nextLevelNeed ?? 2,
+        baseIncomePerSec: newIdol.baseIncomePerSec ?? newIdol.incomePerSec,
+        isNew: true,
+        isFavorite: false,
+        variant: newIdol.variant || "default",
+        unlockedVariants: newIdol.unlockedVariants?.length
+          ? newIdol.unlockedVariants
+          : ["default"],
+      });
       continue;
     }
 
     const idol = { ...updated[idx] };
     idol.shards = (idol.shards ?? 1) + 1;
 
-    const existingUnlocked = Array.isArray(idol.unlockedVariants) ? idol.unlockedVariants : ["default"];
-    const incomingUnlocked = Array.isArray(newIdol.unlockedVariants) ? newIdol.unlockedVariants : [newIdol.variant || "default"];
+    const existingUnlocked = Array.isArray(idol.unlockedVariants)
+      ? idol.unlockedVariants
+      : ["default"];
 
-    idol.unlockedVariants = Array.from(new Set([...existingUnlocked, ...incomingUnlocked]));
+    const incomingUnlocked = Array.isArray(newIdol.unlockedVariants)
+      ? newIdol.unlockedVariants
+      : [newIdol.variant || "default"];
 
-    const hadVariantAlready = existingUnlocked.includes(newIdol.variant || "default");
+    idol.unlockedVariants = Array.from(
+      new Set([...existingUnlocked, ...incomingUnlocked])
+    );
+
+    const hadVariantAlready = existingUnlocked.includes(
+      newIdol.variant || "default"
+    );
+
     if (!hadVariantAlready && newIdol.variant) {
-      idol.variant = newIdol.variant; // auto-equip newly unlocked variant once
+      idol.variant = newIdol.variant;
     }
 
     const mergedRarity = getBetterRarity(idol.rarity, newIdol.rarity);
@@ -1038,13 +1055,24 @@ function mergeOpenedIdols(existing, opened) {
       idol.mutation = mergedMutation;
 
       const group = GROUPS.find((g) => g.name === idol.group);
-      const member = group?.members.find((m) => m.name === idol.name);
-
       const rarityMult = getRarityMultiplier(idol.rarity);
       const mutationMult = getMutationMultiplier(idol.mutation);
 
-      idol.baseIncomePerSec = getMemberValue(group, member) * rarityMult * mutationMult;
-      idol.incomePerSec = idol.baseIncomePerSec * (1 + ((idol.level ?? 1) - 1) * 0.25);
+      if (idol.cardType === "group") {
+        const totalBaseIncome = group.members.reduce((sum, member) => {
+          return sum + getMemberValue(group, member);
+        }, 0);
+
+        idol.baseIncomePerSec =
+          totalBaseIncome * 0.75 * rarityMult * mutationMult;
+      } else {
+        const member = group?.members.find((m) => m.name === idol.name);
+        idol.baseIncomePerSec =
+          getMemberValue(group, member) * rarityMult * mutationMult;
+      }
+
+      idol.incomePerSec =
+        idol.baseIncomePerSec * (1 + ((idol.level ?? 1) - 1) * 0.25);
 
       if (newIdol.image) idol.image = newIdol.image;
     }
