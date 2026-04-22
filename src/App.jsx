@@ -58,9 +58,23 @@ const MUTATION_RANK = {
 
 const SET_BONUS_PER_COMPLETE = 0.2;
 const SAVE_KEY = "idol-collector-save-v4";
+const TUTORIAL_KEY = "idol-collector-tutorial-seen-v1";
 const CONVEYOR_MAX = 7;
 const CONVEYOR_LIFETIME_MS = 35000;
 const REVEAL_DURATION_MS = 2200;
+
+const VARIANTS = {
+  default: {
+    key: "default",
+    label: "Default",
+    signed: false,
+  },
+  signed: {
+    key: "signed",
+    label: "Signed",
+    signed: true,
+  },
+};
 
 const sanitizeIdol = (idol) => ({
   ...idol,
@@ -69,6 +83,11 @@ const sanitizeIdol = (idol) => ({
   level: safeNumber(idol?.level, 1),
   shards: safeNumber(idol?.shards, 1),
   nextLevelNeed: safeNumber(idol?.nextLevelNeed, 2),
+  cardType: idol?.cardType || "member",
+  variant: idol?.variant || "default",
+  unlockedVariants: Array.isArray(idol?.unlockedVariants) && idol.unlockedVariants.length
+    ? idol.unlockedVariants
+    : ["default"],
  });
 
  const sanitizeSave = (save) => {
@@ -114,13 +133,95 @@ const fmtDuration = (totalSec) => {
 
 const now = () => Date.now();
 
+const getPackTypeLabel = (pack) => {
+  return pack.cardType === "group" ? "Group Pack" : "Member Pack";
+};
+
+const getRevealKey = (idol) => `${idol.group}|||${idol.name}`;
+
+const isBrandNewReveal = (idol, collection) => {
+  if (!idol) return false;
+  return !collection.some(
+    (owned) => owned.group === idol.group && owned.name === idol.name
+  );
+};
+
+const isSpecialReveal = (idol, collection) => {
+  if (!idol) return false;
+
+  return (
+    idol.variant === "signed" ||
+    idol.cardType === "group" ||
+    isBrandNewReveal(idol, collection)
+  );
+};
+
+const getRevealTitle = (idol, collection) => {
+  if (!idol) return "New Pull";
+
+  if (isBrandNewReveal(idol, collection)) return "NEW CARD";
+  if (idol.variant === "signed") return "SIGNED PULL";
+  if (idol.cardType === "group") return "SECRET GROUP PULL";
+
+  return "New Pull";
+};
+
+const getRevealLockMs = (idol, collection) => {
+  if (!idol) return REVEAL_DURATION_MS;
+
+  const isNewCard = !collection.some(
+    (owned) => owned.group === idol.group && owned.name === idol.name
+  );
+
+  const isSigned = idol.variant === "signed";
+  const isGroup = idol.cardType === "group";
+
+  // longest: brand new chase pull
+  if (isNewCard) return 1000;
+
+  // medium: special variants / group cards
+  if (isSigned || isGroup) return 1000;
+
+  // short: duplicate / normal reveal
+  return 300;
+};
+
 const getIdolImage = (idol) => {
-  if (idol.image) return idol.image;
-
   const group = GROUPS.find((g) => g.name === idol.group);
-  const member = group?.members.find((m) => m.name === idol.name);
+  if (!group) return idol.image || null;
 
-  return member?.image || null;
+  // Group card image branch
+  if (idol.cardType === "group") {
+    return group.groupVariants?.[idol.variant || "default"]
+      || group.groupPackImage
+      || idol.image
+      || group.packImage
+      || null;
+  }
+
+  // Normal member card branch
+  const member = group.members.find((m) => m.name === idol.name);
+
+  return member?.variants?.[idol.variant || "default"]
+    || member?.image
+    || idol.image
+    || null;
+};
+
+const getAvailableVariantsForIdol = (idol) => {
+  if (!idol) return [];
+
+  // Group cards can only use default
+  if (idol.cardType === "group") {
+    return [VARIANTS.default];
+  }
+
+  return Object.values(VARIANTS);
+};
+
+const getSafeVariantForIdol = (idol, variantKey) => {
+  if (idol?.cardType === "group") return "default";
+  return variantKey || "default";
 };
 
 const getRevealSfxByRarity = (rarity) => {
@@ -248,6 +349,10 @@ const weightedPick = (items, weightKey = "weight") => {
   return items[items.length - 1];
 };
 
+const rollCardType = () => {
+  return Math.random() < 0.01 ? "group" : "member";
+};
+
 const maybeMutation = () => {
   const event = getCurrentMutationEvent(new Date());
   const roll = Math.random();
@@ -339,14 +444,19 @@ const getCompletedGroups = (collection) => {
   const ownedByGroup = new Map();
 
   for (const idol of collection) {
-    if (!ownedByGroup.has(idol.group)) ownedByGroup.set(idol.group, new Set());
+    if (idol.cardType === "group") continue;
+
+    if (!ownedByGroup.has(idol.group)) {
+      ownedByGroup.set(idol.group, new Set());
+    }
+
     ownedByGroup.get(idol.group).add(idol.name);
   }
 
   return new Set(
-    GROUPS.filter((group) => (ownedByGroup.get(group.name)?.size ?? 0) === group.members.length).map(
-      (group) => group.name
-    )
+    GROUPS.filter(
+      (group) => (ownedByGroup.get(group.name)?.size ?? 0) === group.members.length
+    ).map((group) => group.name)
   );
 };
 
@@ -892,20 +1002,32 @@ function mergeOpenedIdols(existing, opened) {
 
     if (idx === -1) {
       updated.unshift({
-        ...newIdol,
-        id: newIdol.id ?? Date.now() + Math.random(),
-        level: newIdol.level ?? 1,
-        shards: newIdol.shards ?? 1,
-        nextLevelNeed: newIdol.nextLevelNeed ?? 2,
-        baseIncomePerSec: newIdol.baseIncomePerSec ?? newIdol.incomePerSec,
-        isNew: true,
-        isFavorite: false,
-      });
+      ...newIdol,
+      id: newIdol.id ?? Date.now() + Math.random(),
+      level: newIdol.level ?? 1,
+      shards: newIdol.shards ?? 1,
+      nextLevelNeed: newIdol.nextLevelNeed ?? 2,
+      baseIncomePerSec: newIdol.baseIncomePerSec ?? newIdol.incomePerSec,
+      isNew: true,
+      isFavorite: false,
+      variant: newIdol.variant || "default",
+      unlockedVariants: newIdol.unlockedVariants?.length ? newIdol.unlockedVariants : ["default"],
+    });
       continue;
     }
 
     const idol = { ...updated[idx] };
     idol.shards = (idol.shards ?? 1) + 1;
+
+    const existingUnlocked = Array.isArray(idol.unlockedVariants) ? idol.unlockedVariants : ["default"];
+    const incomingUnlocked = Array.isArray(newIdol.unlockedVariants) ? newIdol.unlockedVariants : [newIdol.variant || "default"];
+
+    idol.unlockedVariants = Array.from(new Set([...existingUnlocked, ...incomingUnlocked]));
+
+    const hadVariantAlready = existingUnlocked.includes(newIdol.variant || "default");
+    if (!hadVariantAlready && newIdol.variant) {
+      idol.variant = newIdol.variant; // auto-equip newly unlocked variant once
+    }
 
     const mergedRarity = getBetterRarity(idol.rarity, newIdol.rarity);
     const mergedMutation = getBetterMutation(idol.mutation, newIdol.mutation);
@@ -952,6 +1074,8 @@ export default function App() {
   };
 
   const [debugMode, setDebugMode] = useState(true);
+  const [debugCardType, setDebugCardType] = useState("member");
+  const [debugVariant, setDebugVariant] = useState("default");
   const initialSave = sanitizeSave(loadSave());
   const [lastUpdateAt, setLastUpdateAt] = useState(Date.now());
   const [money, setMoney] = useState(initialSave?.money ?? 1000);
@@ -978,6 +1102,9 @@ export default function App() {
   const [shopNotice, setShopNotice] = useState(null);
   const [offlineCapMinutes, setOfflineCapMinutes] = useState(initialSave?.offlineCapMinutes ?? 60);
   const [offlineCapLevel, setOfflineCapLevel] = useState(initialSave?.offlineCapLevel ?? 0);
+  const [revealLockedUntil, setRevealLockedUntil] = useState(0);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialPage, setTutorialPage] = useState(0);
 
   const ui = THEMES[theme] ?? THEMES.dark;
 
@@ -1013,7 +1140,6 @@ export default function App() {
         SHOP_CONFIG.manager.base *
         Math.pow(SHOP_CONFIG.manager.growth, managerLevel)
       );
-        Math.floor(12000 * Math.pow(1.8, managerLevel));
 
     const getExpressDeliveryCost = (groupCost) =>
       Math.floor(groupCost * SHOP_CONFIG.express.multiplier);
@@ -1062,6 +1188,23 @@ export default function App() {
     playSound(equipSfx, 0.45);
     showShopMessage("Offline earnings cap increased by 15 minutes.");
   };
+
+  const setIdolVariant = (targetIdol, variantKey) => {
+    setCollection((prev) =>
+      prev.map((idol) =>
+        idol.group === targetIdol.group && idol.name === targetIdol.name
+          ? { ...idol, variant: variantKey }
+          : idol
+      )
+    );
+
+    setSelectedIdol((prev) =>
+      prev && prev.group === targetIdol.group && prev.name === targetIdol.name
+        ? { ...prev, variant: variantKey }
+        : prev
+    );
+  };
+
 
   const createPackForGroup = (group, options = {}) => {
     const rarity = weightedPick(RARITIES);
@@ -1122,7 +1265,7 @@ export default function App() {
     }, 0);
   }, [collection, completedGroups]);
 
-  const ownedCollectionCount = collection.length;
+  const ownedCollectionCount = collection.filter((idol) => idol.cardType !== "group").length;
   const completionPct = totalCollectionCount === 0 ? 0 : (ownedCollectionCount / totalCollectionCount) * 100;
 
   const sortedCollection = useMemo(() => {
@@ -1150,80 +1293,94 @@ export default function App() {
   }, [binderSort, collection, completedGroups]);
 
   const binderDisplayList = useMemo(() => {
-  const ownedMap = new Map(
-    collection.map((idol) => [`${idol.group}|||${idol.name}`, idol])
-  );
-
-  const fullList = GROUPS.flatMap((group) =>
-    group.members.map((member) => {
-      const key = `${group.name}|||${member.name}`;
-      const owned = ownedMap.get(key);
-
-      if (owned) {
+    const ownedMap = new Map(
+      collection.map((idol) => [`${idol.group}|||${idol.name}`, idol])
+    );
+  
+    // Normal member cards (these can have missing placeholders)
+    const memberEntries = GROUPS.flatMap((group) =>
+      group.members.map((member) => {
+        const key = `${group.name}|||${member.name}`;
+        const owned = ownedMap.get(key);
+      
+        if (owned) {
+          return {
+            ...owned,
+            discovered: true,
+            pullWeight: member.weight,
+            pullChanceText: `${member.weight}%`,
+          };
+        }
+      
         return {
-          ...owned,
-          discovered: true,
+          id: `missing-${group.name}-${member.name}`,
+          name: member.name,
+          group: group.name,
+          tier: group.tier,
+          cardType: "member",
+          image: member.image || null,
+          discovered: false,
+          rarity: null,
+          mutation: null,
+          level: null,
+          shards: null,
+          nextLevelNeed: null,
+          incomePerSec: null,
+          baseIncomePerSec: null,
           pullWeight: member.weight,
           pullChanceText: `${member.weight}%`,
         };
+      })
+    );
+  
+    // Group cards: owned only, never generate missing placeholders
+    const ownedGroupEntries = collection
+      .filter((idol) => idol.cardType === "group")
+      .map((idol) => ({
+        ...idol,
+        discovered: true,
+        pullWeight: 1,
+        pullChanceText: "Secret",
+      }));
+    
+    const fullList = [...memberEntries, ...ownedGroupEntries];
+    
+    const filtered = showUndiscovered
+      ? fullList
+      : fullList.filter((idol) => idol.discovered);
+    
+    filtered.sort((a, b) => {
+      const aFav = a.discovered && a.isFavorite ? 1 : 0;
+      const bFav = b.discovered && b.isFavorite ? 1 : 0;
+    
+      if (aFav !== bFav) return bFav - aFav;
+    
+      if (binderSort === "group") {
+        const byGroup = a.group.localeCompare(b.group);
+        if (byGroup !== 0) return byGroup;
+      
+        if (a.discovered && b.discovered) {
+          const aValue = getEffectiveIdolIncome(a, completedGroups);
+          const bValue = getEffectiveIdolIncome(b, completedGroups);
+          return bValue - aValue;
+        }
+      
+        return a.name.localeCompare(b.name);
       }
-
-      return {
-        id: `missing-${group.name}-${member.name}`,
-        name: member.name,
-        group: group.name,
-        tier: group.tier,
-        image: member.image || null,
-        discovered: false,
-        rarity: null,
-        mutation: null,
-        level: null,
-        shards: null,
-        nextLevelNeed: null,
-        incomePerSec: null,
-        baseIncomePerSec: null,
-        pullWeight: member.weight,
-        pullChanceText: `${member.weight}%`,
-      };
-    })
-  );
-
-  const filtered = showUndiscovered
-    ? fullList
-    : fullList.filter((idol) => idol.discovered);
-
-  filtered.sort((a, b) => {
-   const aFav = a.discovered && a.isFavorite ? 1 : 0;
-   const bFav = b.discovered && b.isFavorite ? 1 : 0;
-
-   if (aFav !== bFav) return bFav - aFav;
-
-   if (binderSort === "group") {
-     const byGroup = a.group.localeCompare(b.group);
-     if (byGroup !== 0) return byGroup;
-
-     if (a.discovered && b.discovered) {
-       const aValue = getEffectiveIdolIncome(a, completedGroups);
-       const bValue = getEffectiveIdolIncome(b, completedGroups);
-       return bValue - aValue;
-     }
-
-     return a.name.localeCompare(b.name);
-   }
-
-   if (!a.discovered && !b.discovered) {
-     return b.pullWeight - a.pullWeight;
-   }
-   if (!a.discovered) return 1;
-   if (!b.discovered) return -1;
-
-   const aValue = getEffectiveIdolIncome(a, completedGroups);
-   const bValue = getEffectiveIdolIncome(b, completedGroups);
-   return bValue - aValue;
-  });
-
-  return filtered;
-}, [collection, showUndiscovered, binderSort, completedGroups]);
+    
+      if (!a.discovered && !b.discovered) {
+        return b.pullWeight - a.pullWeight;
+      }
+      if (!a.discovered) return 1;
+      if (!b.discovered) return -1;
+    
+      const aValue = getEffectiveIdolIncome(a, completedGroups);
+      const bValue = getEffectiveIdolIncome(b, completedGroups);
+      return bValue - aValue;
+    });
+  
+    return filtered;
+  }, [collection, showUndiscovered, binderSort, completedGroups]);
 
 function mutationStyle(name) {
   if (name === "Astral") return styles.pill("#7612a4"); // cosmic blue
@@ -1253,6 +1410,173 @@ function rarityStyle(name) {
   audio.play().catch(() => {});
 };
 
+  const tutorialPages = [
+  {
+    title: "Welcome to Idol Collector",
+    content: (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div>
+          Idol Collector is a collection-focused idle game where you buy packs, open them over time, collect idols, and grow your income.
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center",alignItems: "center", }}>
+          <span style={styles.pill("linear-gradient(90deg, #38bdf8, #60a5fa)")}>Buy Packs</span>
+          <span style={styles.pill("linear-gradient(90deg, #8b5cf6, #c084fc)")}>Open Over Time</span>
+          <span style={styles.pill("linear-gradient(90deg, #22c55e, #86efac)", "#052e16")}>Collect Idols</span>
+          <span style={styles.pill("linear-gradient(90deg, #f59e0b, #fbbf24)", "#3f2a00")}>Earn More</span>
+        </div>
+
+        <div>
+          The basic loop is simple:
+          <div style={{ marginTop: 8, paddingLeft: 12, lineHeight: 1.7 }}>
+            • Packs appear on the conveyor<br />
+            • You buy the ones you want<br />
+            • Packs go into your backpack<br />
+            • You queue them to open<br />
+            • Opened cards go into your binder<br />
+            • Your collection generates passive income
+          </div>
+        </div>
+
+        <div style={{ ...styles.small, lineHeight: 1.6 }}>
+          The game is easy to start, but gets deeper once you begin chasing rare pulls, mutations, set bonuses, and special cards.
+        </div>
+      </div>
+    ),
+  },
+
+  {
+    title: "Rarity, Mutations, and Pull Value",
+    content: (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div>
+          Not every card is equal. Stronger pulls earn more, and some combinations can become extremely valuable.
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Rarity</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center",alignItems: "center", }}>
+            <span style={styles.pill("#334155")}>Normal</span>
+            <span style={styles.pill("linear-gradient(90deg, #f59e0b, #fbbf24)", "#3f2a00")}>Gold</span>
+            <span style={styles.pill("linear-gradient(90deg, #22d3ee, #67e8f9)", "#082f49")}>Diamond</span>
+            <span style={styles.pill("linear-gradient(90deg, #fb7185, #f43f5e)")}>Ruby</span>
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Mutations</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center",alignItems: "center", }}>
+            <span style={styles.pill("#7612a4")}>Astral</span>
+            <span style={styles.pill("#ef4444")}>BloodMoon</span>
+            <span style={styles.pill("#f9a8d4", "#4a044e")}>Cherry Blossom</span>
+          </div>
+        </div>
+
+        <div>
+          Higher rarity and stronger mutations multiply a card’s income. That means even the same idol can feel totally different depending on how lucky the pull was.
+        </div>
+
+        <div style={{ ...styles.small, lineHeight: 1.6 }}>
+          A strong mutation glow and card border usually means you pulled something worth paying attention to.
+        </div>
+      </div>
+    ),
+  },
+
+  {
+    title: "Binder, Duplicates, and Special Pulls",
+    content: (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div>
+          Your binder is your long-term progress. Filling it out matters, and even duplicates still help.
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>What happens when you pull a card?</div>
+          <div style={{ marginTop: 8, paddingLeft: 12, lineHeight: 1.7 }}>
+            • New cards fill your binder<br />
+            • Duplicate pulls increase stored pulls / shards<br />
+            • Completing a full group activates a set bonus<br />
+            • Rare variants and hidden surprises can appear
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Special Pulls</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center", }}>
+            <span style={styles.pill("linear-gradient(90deg, #aaaaaa, #ffffff)", "#3f2a00")}>Signed</span>
+            <span style={styles.pill("linear-gradient(90deg, #ffa32a, #f6ff42)", "#111827")}>Group Card</span>
+            <span style={styles.pill("linear-gradient(90deg, #22c55e, #86efac)", "#052e16")}>New Card</span>
+          </div>
+        </div>
+
+        <div>
+          Some cards are worth slowing down for. Signed cards are rare variants, Group Cards are hidden bonus-style pulls, and a brand new card can be the exact chase you were waiting for.
+        </div>
+      </div>
+    ),
+  },
+
+  {
+    title: "Events, Upgrades, and Progression",
+    content: (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div>
+          Once you understand the collection loop, the next step is optimization: opening faster, earning more, and chasing specific goals.
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Shop & Progression</div>
+          <div style={{ marginTop: 8, paddingLeft: 12, lineHeight: 1.7 }}>
+            • Queue upgrades let you open more at once<br />
+            • Managers increase opening speed<br />
+            • Offline storage lets you collect more while away<br />
+            • Lightsticks boost matching group packs
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Mutation Events</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", alignItems: "center", }}>
+            <span style={styles.pill("#7612a4")}>Astral Window</span>
+            <span style={styles.pill("#ef4444")}>BloodMoon Window</span>
+            <span style={styles.pill("#f9a8d4", "#4a044e")}>Cherry Blossom Window</span>
+          </div>
+        </div>
+
+        <div>
+          Event windows temporarily increase the odds of specific mutations. If you’re targeting certain aesthetics or stronger cards, timing your openings can matter.
+        </div>
+
+        <div style={{ ...styles.small, lineHeight: 1.6 }}>
+          Early game is about building your collection. Mid and late game are about efficiency, rare pulls, and chasing the exact cards you want.
+        </div>
+      </div>
+    ),
+  },
+];
+
+  const openTutorial = () => {
+    setTutorialPage(0);
+    setShowTutorial(true);
+  };
+
+  const closeTutorial = () => {
+    setShowTutorial(false);
+  };
+
+  const finishTutorial = () => {
+    localStorage.setItem(TUTORIAL_KEY, "true");
+    setShowTutorial(false);
+    setTutorialPage(0);
+  };
+
+  useEffect(() => {
+    const seenTutorial = localStorage.getItem(TUTORIAL_KEY);
+    if (!seenTutorial) {
+      setShowTutorial(true);
+    }
+  }, []);
 
   useEffect(() => {
   const updateEventInfo = () => {
@@ -1399,10 +1723,13 @@ function rarityStyle(name) {
         const rarity = weightedPick(RARITIES, "weight");
         const mutation = maybeMutation();
 
+        const cardType = rollCardType();
+
         const newPack = {
           id: nextId.current++,
           group: chosen.name,
           tier: chosen.tier,
+          cardType,
           cost: chosen.cost * (RARITY_PACK_PRICE_MULT[rarity.name] || 1),
           rarity: rarity.name,
           rarityMult: rarity.mult,
@@ -1426,11 +1753,14 @@ function rarityStyle(name) {
         const rarity = weightedPick(RARITIES, "weight");
         const mutation = maybeMutation();
 
+        const cardType = rollCardType();
+
         return [
           {
             id: nextId.current++,
             group: chosen.name,
             tier: chosen.tier,
+            cardType,
             cost: chosen.cost * (RARITY_PACK_PRICE_MULT[rarity.name] || 1),
             rarity: rarity.name,
             rarityMult: rarity.mult,
@@ -1496,45 +1826,49 @@ function rarityStyle(name) {
     if (revealQueue.length === 0) return;
 
     const nextReveal = revealQueue[0];
+    const revealDuration = getRevealLockMs(nextReveal, collection);
 
     playSound(revealSfx, 0.55);
-    // playSound(getRevealSfxByRarity(nextReveal.rarity), 0.55);
 
     setActiveReveal(nextReveal);
     setRevealQueue((q) => q.slice(1));
+    setRevealLockedUntil(Date.now() + revealDuration);
 
     const timer = setTimeout(() => {
       setCollection((old) => mergeOpenedIdols(old, [nextReveal]));
       setActiveReveal(null);
-    }, REVEAL_DURATION_MS);
+      setRevealLockedUntil(0);
+    }, revealDuration);
 
     return () => clearTimeout(timer);
-  }, [activeReveal, revealQueue]);
+  }, [activeReveal, revealQueue, collection]);
 
-  const createDebugPack = ({ groupName, rarityName, mutationName }) => {
-  const group = GROUPS.find((g) => g.name === groupName);
-  const rarity = RARITIES.find((r) => r.name === rarityName);
-  const mutation =
-    mutationName === "None"
-      ? null
-      : MUTATIONS.find((m) => m.name === mutationName);
-
-  return {
-    id: nextId.current++,
-    group: group.name,
-    tier: group.tier,
-    cost: group.cost,
-    rarity: rarity.name,
-    rarityMult: rarity.mult,
-    mutation: mutation?.name || null,
-    mutationMult: mutation?.mult || 1,
-    packImage: group.packImage || null,
-    spawnedAt: Date.now(),
-    expiresAt: Date.now() + CONVEYOR_LIFETIME_MS,
+  const createDebugPack = ({ groupName, rarityName, mutationName, cardType, variantName }) => {
+    const group = GROUPS.find((g) => g.name === groupName);
+    const rarity = RARITIES.find((r) => r.name === rarityName);
+    const mutation =
+      mutationName === "None"
+        ? null
+        : MUTATIONS.find((m) => m.name === mutationName);
+  
+    return {
+      id: nextId.current++,
+      group: group.name,
+      tier: group.tier,
+      cardType: cardType || "member",
+      forcedVariant: variantName || null,
+      cost: group.cost,
+      rarity: rarity.name,
+      rarityMult: rarity.mult,
+      mutation: mutation?.name || null,
+      mutationMult: mutation?.mult || 1,
+      packImage: group.packImage || null,
+      spawnedAt: Date.now(),
+      expiresAt: Date.now() + CONVEYOR_LIFETIME_MS,
+    };
   };
-};
 
-const createDebugIdol = ({ groupName, memberName, rarityName, mutationName }) => {
+const createDebugIdol = ({ groupName, memberName, rarityName, mutationName, variantName }) => {
   const group = GROUPS.find((g) => g.name === groupName);
   const member = group.members.find((m) => m.name === memberName);
   const rarityMult = getRarityMultiplier(rarityName);
@@ -1549,6 +1883,7 @@ const createDebugIdol = ({ groupName, memberName, rarityName, mutationName }) =>
     name: member.name,
     group: group.name,
     tier: group.tier,
+    cardType: "member",
     rarity: rarityName,
     mutation: mutationName === "None" ? null : mutationName,
     incomePerSec: finalIncome,
@@ -1558,7 +1893,46 @@ const createDebugIdol = ({ groupName, memberName, rarityName, mutationName }) =>
     nextLevelNeed: 2,
     ownedCosmetics: COSMETICS.map((c) => ({ ...c, level: 0, activeUntil: 0 })),
     activeCosmetics: [],
-    image: member.image || null,
+    variant: variantName || "default",
+    unlockedVariants:
+      variantName === "signed" ? ["default", "signed"] : ["default"],
+    image:
+      member.variants?.[variantName || "default"]
+      || member.image
+      || null,
+  };
+};
+
+const createDebugGroupIdol = ({ groupName, rarityName, mutationName }) => {
+  const group = GROUPS.find((g) => g.name === groupName);
+  const rarityMult = getRarityMultiplier(rarityName);
+  const mutationMult =
+    mutationName === "None" ? 1 : getMutationMultiplier(mutationName);
+
+  const totalBaseIncome = group.members.reduce((sum, member) => {
+    return sum + getMemberValue(group, member);
+  }, 0);
+
+  const finalIncome = totalBaseIncome * 0.75 * rarityMult * mutationMult;
+
+  return {
+    id: nextId.current++,
+    name: group.name,
+    group: group.name,
+    tier: group.tier,
+    cardType: "group",
+    rarity: rarityName,
+    mutation: mutationName === "None" ? null : mutationName,
+    incomePerSec: finalIncome,
+    baseIncomePerSec: finalIncome,
+    level: 1,
+    shards: 1,
+    nextLevelNeed: 2,
+    ownedCosmetics: [],
+    activeCosmetics: [],
+    variant: "default",
+    unlockedVariants: ["default"],
+    image: group.groupPackImage || group.packImage || null,
   };
 };
 
@@ -1571,6 +1945,8 @@ const debugSpawnPackToConveyor = () => {
     groupName: debugGroup,
     rarityName: debugRarity,
     mutationName: debugMutation,
+    cardType: debugCardType,
+    variantName: debugVariant,
   });
 
   setConveyor((prev) => [...cleanConveyor(prev), pack].slice(-CONVEYOR_MAX));
@@ -1581,9 +1957,12 @@ const debugAddPackToBackpack = () => {
     groupName: debugGroup,
     rarityName: debugRarity,
     mutationName: debugMutation,
+    cardType: debugCardType,
+    variantName: debugVariant,
   });
 
-  const key = `${pack.group}|${pack.rarity}|${pack.mutation || "None"}`;
+  const key = `${pack.group}|${pack.cardType || "member"}|${pack.rarity}|${pack.mutation || "None"}`;
+
   setBackpack((prev) => ({
     ...prev,
     [key]: { ...(prev[key] || pack), count: (prev[key]?.count || 0) + 1 },
@@ -1591,12 +1970,21 @@ const debugAddPackToBackpack = () => {
 };
 
 const debugAddIdolToBinder = () => {
-  const idol = createDebugIdol({
-    groupName: debugGroup,
-    memberName: debugMember,
-    rarityName: debugRarity,
-    mutationName: debugMutation,
-  });
+  const idol =
+    debugCardType === "group"
+      ? createDebugGroupIdol({
+          groupName: debugGroup,
+          rarityName: debugRarity,
+          mutationName: debugMutation,
+          variantName: debugVariant,
+        })
+      : createDebugIdol({
+          groupName: debugGroup,
+          memberName: debugMember,
+          rarityName: debugRarity,
+          mutationName: debugMutation,
+          variantName: debugVariant,
+        });
 
   setCollection((prev) => mergeOpenedIdols(prev, [idol]));
 };
@@ -1633,25 +2021,34 @@ useEffect(() => {
       playSound(buySfx, 0.4);
 
     setMoney((m) => m - pack.cost);
-    const key = `${pack.group}|${pack.rarity}|${pack.mutation || "None"}`;
+    const key = `${pack.group}|${pack.cardType || "member"}|${pack.rarity}|${pack.mutation || "None"}`;
     setBackpack((prev) => ({
       ...prev,
       [key]: { ...(prev[key] || pack), count: (prev[key]?.count || 0) + 1 },
     }));
     setConveyor((prev) => prev.filter((p) => p.id !== pack.id));
   };
+
   const skipAllReveals = () => {
-    const idolsToMerge = [
+    const allReveals = [
       ...(activeReveal ? [activeReveal] : []),
       ...revealQueue,
     ];
 
-    if (idolsToMerge.length === 0) return;
+    if (allReveals.length === 0) return;
 
-    setCollection((old) => mergeOpenedIdols(old, idolsToMerge));
+    const specialReveals = allReveals.filter((idol) => isSpecialReveal(idol, collection));
+    const normalReveals = allReveals.filter((idol) => !isSpecialReveal(idol, collection));
+
+    if (normalReveals.length > 0) {
+      setCollection((old) => mergeOpenedIdols(old, normalReveals));
+    }
+
     setActiveReveal(null);
-    setRevealQueue([]);
+    setRevealQueue(specialReveals);
+    setRevealLockedUntil(0);
   };
+
   const queuePackMultiple = (key, amount) => {
     const pack = backpack[key];
     if (!pack) return;
@@ -1678,6 +2075,7 @@ useEffect(() => {
       baseSec,
       progress: 0,
       lastProgressAt: now(),
+      cardType: pack.cardType || "member",
     }));
 
     setOpening((prev) => {
@@ -1798,8 +2196,57 @@ useEffect(() => {
     playSound(trashSfx, 0.4);
   };
 
+  const rollVariant = (pack) => {
+    if (pack.cardType === "group") return "default";
+    // you can expand this later
+    if (Math.random() < 0.02) return "signed";
+    return "default";
+  };
+
   const openPack = (pack) => {
     const group = GROUPS.find((g) => g.name === pack.group);
+    if (!group) return null;
+
+    const rolledVariant = pack.forcedVariant || rollVariant(pack);
+
+    // GROUP PACK BRANCH
+    if (pack.cardType === "group") {
+      const totalBaseIncome = group.members.reduce((sum, member) => {
+        return sum + getMemberValue(group, member);
+      }, 0);
+
+      const finalIncome = safeNumber(
+        totalBaseIncome * 0.75 * safeNumber(pack.rarityMult, 1) * safeNumber(pack.mutationMult, 1),
+        0
+      );
+
+      return {
+        id: nextId.current++,
+        name: group.name,
+        group: group.name,
+        tier: group.tier,
+        cardType: "group",
+        rarity: pack.rarity,
+        mutation: pack.mutation,
+        incomePerSec: finalIncome,
+        baseIncomePerSec: finalIncome,
+        level: 1,
+        shards: 1,
+        nextLevelNeed: 2,
+        ownedCosmetics: [],
+        activeCosmetics: [],
+        variant: rolledVariant,
+        unlockedVariants:
+          rolledVariant === "signed" ? ["default", "signed"] : ["default"],
+        image:
+          group.groupVariants?.[rolledVariant]
+          || group.groupPackImage
+          || group.packImage
+          || null,
+      };
+    }
+
+    // NORMAL MEMBER PACK BRANCH
     const member = weightedPick(group.members, "weight");
 
     const finalIncome = safeNumber(
@@ -1812,6 +2259,7 @@ useEffect(() => {
       name: member.name,
       group: group.name,
       tier: group.tier,
+      cardType: "member",
       rarity: pack.rarity,
       mutation: pack.mutation,
       incomePerSec: finalIncome,
@@ -1819,9 +2267,15 @@ useEffect(() => {
       level: 1,
       shards: 1,
       nextLevelNeed: 2,
-      ownedCosmetics: COSMETICS.map((c) => ({ ...c, level: 0, activeUntil: 0 })),
+      ownedCosmetics: [],
       activeCosmetics: [],
-      image: member.image || null,
+      variant: rolledVariant,
+      unlockedVariants:
+        rolledVariant === "signed" ? ["default", "signed"] : ["default"],
+      image:
+        member.variants?.[rolledVariant]
+        || member.image
+        || null,
     };
   };
 
@@ -1917,20 +2371,32 @@ useEffect(() => {
   const backpackEntries = Object.entries(backpack).filter(([, pack]) => pack.count > 0);
   const eventColor = eventNow ? EVENT_COLORS[eventNow.mutation] : "#64748b";
   const freeQueueSlots = maxQueue - opening.length;
+  const activeRevealIsSpecial = activeReveal ? isSpecialReveal(activeReveal, collection) : false;
+  const activeRevealTitle = activeReveal ? getRevealTitle(activeReveal, collection) : "New Pull";
+  const revealStillLocked = Date.now() < revealLockedUntil;
 
   return (
     <div style={styles.page}>
       <div style={styles.wrap}>
         <h1 style={{ marginTop: 0, color: ui.text, fontFamily: 'Comic Sans MS' }}>Idol Collector Prototype</h1>
-        <button
-          style={styles.buttonAlt}
-          onClick={() => {
-            localStorage.removeItem(SAVE_KEY);
-            window.location.reload();
-          }}
-        >
-          Reset Save
-        </button>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <button
+            style={styles.buttonAlt}
+            onClick={openTutorial}
+          >
+            Help
+          </button>
+
+          <button
+            style={styles.buttonAlt}
+            onClick={() => {
+              localStorage.removeItem(SAVE_KEY);
+              window.location.reload();
+            }}
+          >
+            Reset Save
+          </button>
+        </div>
 
         <div style={{...styles.statsGrid, marginTop: 14}}>
           <div style={styles.card}>
@@ -2048,8 +2514,14 @@ useEffect(() => {
                   <div key={key} style={{ ...styles.card, marginBottom: 10, background: ui.panelAlt, border: `1px solid ${ui.cardBorder}`, }}>
                     <div style={styles.row}>
                       <div>
-                        <div style={{ fontWeight: 700 }}>{pack.group} ×{pack.count}</div>
-                        <div style={styles.small}>{pack.rarity}{pack.mutation ? ` • ${pack.mutation}` : ""}</div>
+                        <div style={{ fontWeight: 700 }}>
+                          {pack.group} {pack.cardType === "group" ? "Group Pack" : "Pack"} ×{pack.count}
+                        </div>
+
+                        <div style={styles.small}>
+                          {getPackTypeLabel(pack)} • {pack.rarity}
+                          {pack.mutation ? ` • ${pack.mutation}` : ""}
+                        </div>
                       </div>
                     
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -2119,9 +2591,14 @@ useEffect(() => {
                     <div key={pack.id} style={{ marginBottom: 12 }}>
                       <div style={styles.row}>
                         <div>
-                          <b>{pack.group}</b>
-                          <div style={styles.small}>{pack.rarity}{pack.mutation ? ` • ${pack.mutation}` : ""}</div>
-                        </div>
+                            <b>
+                              {pack.group} {pack.cardType === "group" ? "Group Pack" : "Pack"}
+                            </b>
+                            <div style={styles.small}>
+                              {getPackTypeLabel(pack)} • {pack.rarity}
+                              {pack.mutation ? ` • ${pack.mutation}` : ""}
+                            </div>
+                          </div>
                         <div>
                           {fmtDuration(remainingSec)} {speed > 1 ? <span style={styles.small}>⚡ boosted</span> : null}
                         </div>
@@ -2186,7 +2663,9 @@ useEffect(() => {
                       if (idol.isNew) {
                         setCollection((prev) =>
                           prev.map((i) =>
-                            i.id === idol.id ? { ...i, isNew: false } : i
+                             i.group === idol.group && i.name === idol.name
+                              ? { ...i, isNew: false }
+                              : i
                           )
                         );
                       }
@@ -2275,12 +2754,12 @@ useEffect(() => {
                       {idol.mutation ? <span style={mutationStyle(idol.mutation)}>{idol.mutation}</span> : null}
                     </div>
                     <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800 }}>
-                        {idol.name}
-                      </div>
+                      {idol.cardType === "group" ? `${idol.group} Group Card` : idol.name}
+                    </div>
 
-                      <div style={{ fontSize: 16, color: ui.subtext }}>
-                        {idol.group}
-                      </div>
+                    <div style={{ fontSize: 16, color: ui.subtext }}>
+                      {idol.cardType === "group" ? "Secret Group Pull" : idol.group}
+                    </div>
                     {isMissing ? (
                     <>
                       <div style={{ marginTop: 8, fontWeight: 700, color: "#94a3b8" }}>
@@ -2451,7 +2930,11 @@ useEffect(() => {
         {tab === "sets" && (
           <div style={styles.grid2}>
             {GROUPS.map((group) => {
-              const owned = new Set(collection.filter((i) => i.group === group.name).map((i) => i.name));
+              const ownedMembers = collection.filter(
+                (i) => i.group === group.name && i.cardType !== "group"
+              );
+
+              const owned = new Set(ownedMembers.map((i) => i.name));
               const progress = owned.size;
               const done = progress === group.members.length;
               return (
@@ -2493,6 +2976,16 @@ useEffect(() => {
       <h2 style={{ marginTop: 0, color: ui.text }}>Debug Pack / Idol Builder</h2>
 
       <div style={{ display: "grid", gap: 10 }}>
+
+        <select
+          value={debugCardType}
+          onChange={(e) => setDebugCardType(e.target.value)}
+          style={styles.buttonAlt}
+        >
+          <option value="member">Member Pack</option>
+          <option value="group">Group Pack</option>
+        </select>
+
         <select
           value={debugGroup}
           onChange={(e) => setDebugGroup(e.target.value)}
@@ -2515,6 +3008,15 @@ useEffect(() => {
               {member.name}
             </option>
           ))}
+        </select>
+        
+        <select
+          value={debugVariant}
+          onChange={(e) => setDebugVariant(e.target.value)}
+          style={styles.buttonAlt}
+        >
+          <option value="default">Default</option>
+          <option value="signed">Signed</option>
         </select>
 
         <select
@@ -2627,8 +3129,11 @@ useEffect(() => {
             style={styles.modalBg}
             onClick={() => {
               if (!activeReveal) return;
+              if (Date.now() < revealLockedUntil) return;
+
               setCollection((old) => mergeOpenedIdols(old, [activeReveal]));
               setActiveReveal(null);
+              setRevealLockedUntil(0);
             }}
           >
           <div
@@ -2646,10 +3151,52 @@ useEffect(() => {
             }}
           >
             <div style={{ textAlign: "center", position: "relative", zIndex: 2 }}>
-              <div style={{ ...styles.small, letterSpacing: 2, textTransform: "uppercase" }}>New Pull</div>
+              <div
+                style={{
+                  ...styles.small,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  color: activeRevealIsSpecial ? "#facc15" : ui.subtext,
+                  textShadow: activeRevealIsSpecial ? "0 0 10px rgba(250,204,21,0.35)" : "none",
+                }}
+              >
+                {activeRevealTitle}
+              </div>
               <div style={{ fontSize: 32, fontWeight: 900, marginTop: 8 }}>{activeReveal.name}</div>
               <div style={{ fontSize: 18, color: ui.subtext, marginTop: 6 }}>{activeReveal.group}</div>
+              
             </div>
+            {activeRevealIsSpecial ? (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    justifyContent: "center",
+                    flexWrap: "wrap",
+                    marginTop: 12,
+                    position: "relative",
+                    zIndex: 2,
+                  }}
+                >
+                  {isBrandNewReveal(activeReveal, collection) ? (
+                    <span style={styles.pill("linear-gradient(90deg, #22c55e, #86efac)", "#052e16")}>
+                      New Card
+                    </span>
+                  ) : null}
+
+                  {activeReveal.variant === "signed" ? (
+                    <span style={styles.pill("linear-gradient(90deg, #f59e0b, #fde68a)", "#3f2a00")}>
+                      Signed
+                    </span>
+                  ) : null}
+
+                  {activeReveal.cardType === "group" ? (
+                    <span style={styles.pill("linear-gradient(90deg, #f59e0b, #f472b6)", "#111827")}>
+                      Group Card
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             <div style={{ ...styles.idolBox, 
               padding: getIdolImage(activeReveal) ? 0 : 12, 
               background: getIdolImage(activeReveal) ? "transparent" : styles.idolBox.background, 
@@ -2697,71 +3244,183 @@ useEffect(() => {
 
       {selectedIdol ? (
         <div style={styles.modalBg} onClick={() => setSelectedIdol(null)}>
-          <div style={{...styles.modal, border: getRarityBorder(selectedIdol.rarity)}} onClick={(e) => e.stopPropagation()}>
+          <div
+            style={{ ...styles.modal, border: getRarityBorder(selectedIdol.rarity) }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div style={styles.row}>
-              <h2 style={{ margin: 0 }}>{selectedIdol.name} • {selectedIdol.group}</h2>
-              <button style={styles.buttonAlt} onClick={() => setSelectedIdol(null)}>Close</button>
+              <h2 style={{ margin: 0, color: ui.text }}>
+                {selectedIdol.name} • {selectedIdol.group}
+              </h2>
+              <button style={styles.buttonAlt} onClick={() => setSelectedIdol(null)}>
+                Close
+              </button>
             </div>
+
             <div style={{ ...styles.grid2, marginTop: 16 }}>
               <div>
-                <div style={{ ...styles.idolBox, 
-                  padding: getIdolImage(selectedIdol) ? 0 : 12, 
-                  background: getIdolImage(selectedIdol) ? "transparent" : styles.idolBox.background, 
-                  minHeight: 360, 
-                  color: getMutationColor(selectedIdol.mutation),
-                  border: getMutationBorder(selectedIdol.mutation),
-                  animation: "shadowPulse 1s infinite ease-in-out" 
-                  }}>
-                  {getIdolImage(selectedIdol) ? <img src={getIdolImage(selectedIdol)} alt={selectedIdol.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16, position: "relative", zIndex: 1 }} /> : (
+                <div
+                  style={{
+                    ...styles.idolBox,
+                    padding: getIdolImage(selectedIdol) ? 0 : 12,
+                    background: getIdolImage(selectedIdol)
+                      ? "transparent"
+                      : styles.idolBox.background,
+                    minHeight: 360,
+                    color: getMutationColor(selectedIdol.mutation),
+                    border: getMutationBorder(selectedIdol.mutation),
+                    animation: "shadowPulse 1s infinite ease-in-out",
+                  }}
+                >
+                  {getIdolImage(selectedIdol) ? (
+                    <img
+                      src={getIdolImage(selectedIdol)}
+                      alt={selectedIdol.name}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        borderRadius: 16,
+                        position: "relative",
+                        zIndex: 1,
+                      }}
+                    />
+                  ) : (
                     <div style={{ position: "relative", zIndex: 1 }}>
                       <div style={{ fontSize: 34, fontWeight: 800 }}>{selectedIdol.name}</div>
                       <div style={{ color: ui.subtext }}>{selectedIdol.group}</div>
                     </div>
                   )}
+
                   <MutationParticles mutation={selectedIdol.mutation} dense />
                 </div>
+                
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                   <span style={rarityStyle(selectedIdol.rarity)}>{selectedIdol.rarity}</span>
-                  {selectedIdol.mutation ? <span style={mutationStyle(selectedIdol.mutation)}>{selectedIdol.mutation}</span> : null}
-                  <span style={styles.pill("#0f766e")}>${fmt(getEffectiveIdolIncome(selectedIdol, completedGroups))}/s</span>
+                  {selectedIdol.mutation ? (
+                    <span style={mutationStyle(selectedIdol.mutation)}>
+                      {selectedIdol.mutation}
+                    </span>
+                  ) : null}
+                  <span style={styles.pill("#0f766e")}>
+                    ${fmt(getEffectiveIdolIncome(selectedIdol, completedGroups))}/s
+                  </span>
+                  <span style={{...styles.pill("rgba(255, 255, 255, 0.42)"), color: ui.text}}>
+                    {selectedIdol.variant === "signed" ? "Signed" : "Default"}
+                  </span>
                 </div>
-                <div style={{ marginTop: 32, fontSize: 40, fontWeight: 800 }}>{selectedIdol.name}</div>
-                <div style={{ marginTop: 8, fontSize: 18, color: ui.subtext }}>{selectedIdol.group}</div>
+                
+                <div style={{ marginTop: 32, fontSize: 40, fontWeight: 800 }}>
+                  {selectedIdol.name}
+                </div>
+                
+                <div style={{ marginTop: 8, fontSize: 18, color: ui.subtext }}>
+                  {selectedIdol.group}
+                </div>
+                
                 {completedGroups.has(selectedIdol.group) ? (
-                  <div style={{ ...styles.small, marginTop: 8, color: "#67e8f9" }}>Set bonus active: +20% income</div>
+                  <div style={{ ...styles.small, marginTop: 8, color: "#67e8f9" }}>
+                    Set bonus active: +20% income
+                  </div>
                 ) : null}
               </div>
               <div>
                 <div style={styles.card}>
-                  <h3 style={{ marginTop: 0 }}>Cosmetics</h3>
-                  {selectedIdol.ownedCosmetics.map((cos) => {
-                    const level = cos.level;
-                    const upgradeCost = getEffectiveIdolIncome(selectedIdol, completedGroups) * 60 * (level + 1);
-                    return (
-                      <div key={cos.key} style={{ ...styles.card, marginBottom: 10, background: "rgba(30,41,59,0.55)" }}>
-                        <div style={styles.row}>
-                          <div>
-                            <div style={{ fontWeight: 700 }}>{cos.label}</div>
-                            <div style={styles.small}>Tap +{Math.round(cos.tapBonus * 100)}% • Passive +{Math.round(cos.passiveBonus * 100)}%</div>
-                            <div style={styles.small}>Level {level}/3</div>
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button style={styles.button} disabled={level === 0} onClick={() => activateCosmetic(selectedIdol, cos.key)}>Activate</button>
-                            <button style={styles.buttonAlt} disabled={level >= 3 || money < upgradeCost} onClick={() => upgradeCosmetic(selectedIdol, cos.key)}>Up ${fmt(upgradeCost)}</button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ ...styles.card, marginTop: 12 }}>
-                  <h3 style={{ marginTop: 0 }}>Quick Action</h3>
-                  <button
-                    style={styles.button}
-                    onClick={(e) => tapIdol(selectedIdol, e)}
+                  <h3 style={{ marginTop: 0, marginBottom: 4 }}>
+                    {selectedIdol.cardType === "group" ? "Card Art" : "Card Art"}
+                  </h3>
+
+                  <div style={{ ...styles.small, marginBottom: 12 }}>
+                    {selectedIdol.cardType === "group"
+                      ? "This card uses a single artwork."
+                      : "Choose which unlocked card art to display in your binder."}
+                  </div>
+                    
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        selectedIdol.cardType === "group"
+                          ? "1fr"
+                          : "repeat(2, minmax(0, 1fr))",
+                      gap: 12,
+                      justifyItems: "center",
+                    }}
                   >
-                    Tap for Bonus
-                  </button>
+                    {getAvailableVariantsForIdol(selectedIdol).map((variantDef) => {
+                      const safeVariantKey = getSafeVariantForIdol(selectedIdol, variantDef.key);
+                      const unlocked = (selectedIdol.unlockedVariants || ["default"]).includes(safeVariantKey);
+                    
+                      const previewIdol = {
+                        ...selectedIdol,
+                        variant: safeVariantKey,
+                      };
+                    
+                      const isEquipped = selectedIdol.variant === safeVariantKey;
+                    
+                      return (
+                        <button
+                          key={variantDef.key}
+                          disabled={!unlocked}
+                          onClick={() => {
+                            if (!unlocked) return;
+                            setIdolVariant(selectedIdol, safeVariantKey);
+                          }}
+                          style={{
+                            ...styles.card,
+                            width: "100%",
+                            maxWidth: selectedIdol.cardType === "group" ? 220 : "none",
+                            background: ui.panelAlt,
+                            opacity: unlocked ? 1 : 0.55,
+                            cursor: unlocked ? "pointer" : "not-allowed",
+                            textAlign: "left",
+                            border: isEquipped
+                              ? "2px solid #c6c6c6"
+                              : `1px solid ${ui.cardBorder}`,
+                            boxShadow: isEquipped
+                              ? "0 0 16px rgba(187, 187, 187, 0.64)"
+                              : "none",
+                          }}
+                        >
+                          <div
+                            style={{
+                              ...styles.idolBox,
+                              padding: 0,
+                              minHeight: 180,
+                              filter: unlocked ? "none" : "grayscale(1) brightness(0.45) blur(4px)",
+                            }}
+                          >
+                            {getIdolImage(previewIdol) ? (
+                              <img
+                                src={getIdolImage(previewIdol)}
+                                alt={variantDef.label}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                  borderRadius: 14,
+                                }}
+                              />
+                            ) : (
+                              <div style={{ padding: 12 }}>{variantDef.label}</div>
+                            )}
+                          </div>
+                          
+                          <div style={{ marginTop: 10, fontWeight: 800, color:ui.text }}>
+                            {variantDef.label}
+                          </div>
+                          
+                          <div style={styles.small}>
+                            {!unlocked
+                              ? "Locked"
+                              : isEquipped
+                              ? "Equipped"
+                              : "Click to equip"}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2769,6 +3428,150 @@ useEffect(() => {
         </div>
       ) : null}
 
+
+      {showTutorial && (
+        <div style={styles.modalBg} onClick={closeTutorial}>
+          <div
+            style={{
+              ...styles.modal,
+              width: "min(780px, 100%)",
+              maxWidth: 780,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                position: "relative",
+                minHeight: 52,
+                marginBottom: 8,
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: 0,
+                  transform: "translateX(-50%)",
+                  textAlign: "center",
+                  width: "100%",
+                  maxWidth: "80%",
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  style={{
+                    ...styles.small,
+                    letterSpacing: 2,
+                    textTransform: "uppercase",
+                    marginBottom: 8,
+                  }}
+                >
+                  How to Play
+                </div>
+                
+                <h2 style={{ margin: 0, color: ui.text }}>
+                  {tutorialPages[tutorialPage].title}
+                </h2>
+              </div>
+                
+              <button
+                style={{
+                  ...styles.buttonAlt,
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  zIndex: 2,
+                }}
+                onClick={closeTutorial}
+              >
+                Close
+              </button>
+            </div>
+                
+            <div
+              style={{
+                marginTop: 18,
+                background: ui.panelAlt,
+                border: `1px solid ${ui.cardBorder}`,
+                borderRadius: 18,
+                padding: 18,
+                lineHeight: 1.6,
+                fontSize: 16,
+                color: ui.text,
+                minHeight: 280,
+              }}
+            >
+              {tutorialPages[tutorialPage].content}
+            </div>
+            
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                gap: 8,
+                marginTop: 16,
+              }}
+            >
+              {tutorialPages.map((_, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: idx === tutorialPage ? ui.button : ui.cardBorderSoft,
+                    opacity: idx === tutorialPage ? 1 : 0.55,
+                  }}
+                />
+              ))}
+            </div>
+            
+            <div
+              style={{
+                ...styles.small,
+                textAlign: "center",
+                marginTop: 10,
+              }}
+            >
+              {tutorialPage + 1} / {tutorialPages.length}
+            </div>
+            
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 10,
+                marginTop: 20,
+              }}
+            >
+              <button
+                style={styles.buttonAlt}
+                disabled={tutorialPage === 0}
+                onClick={() => setTutorialPage((p) => Math.max(0, p - 1))}
+              >
+                Back
+              </button>
+            
+              {tutorialPage === tutorialPages.length - 1 ? (
+                <button style={styles.button} onClick={finishTutorial}>
+                  Start Collecting
+                </button>
+              ) : (
+                <button
+                  style={styles.button}
+                  onClick={() =>
+                    setTutorialPage((p) =>
+                      Math.min(tutorialPages.length - 1, p + 1)
+                    )
+                  }
+                >
+                  Next
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     <button
       onClick={cycleTheme}

@@ -15,6 +15,23 @@ export default function ConveyorSection({
 }) {
 
 const [hoveredPackId, setHoveredPackId] = useState(null);
+const isGroupPack = (pack) => pack.cardType === "group";
+
+const getSpecialPackGlow = (pack, isHovered) => {
+  if (!isGroupPack(pack)) {
+    return isHovered
+      ? pack.mutation
+        ? MUTATION_VISUALS[pack.mutation]?.glow || "0 18px 34px rgba(0,0,0,0.35)"
+        : "0 18px 34px rgba(0,0,0,0.35)"
+      : pack.mutation
+      ? MUTATION_VISUALS[pack.mutation]?.glow
+      : "0 10px 28px rgba(0,0,0,0.25)";
+  }
+
+  return isHovered
+    ? "0 0 16px rgba(245,158,11,0.40), 0 0 28px rgba(244,114,182,0.28), 0 18px 34px rgba(0,0,0,0.35)"
+    : "0 0 10px rgba(245,158,11,0.25), 0 0 18px rgba(244,114,182,0.18), 0 10px 28px rgba(0,0,0,0.25)";
+};
 
 
 
@@ -80,13 +97,11 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
                 transform: isHovered
                   ? `translateX(-${leftPct * 0.18}%) scale(1.035)`
                   : `translateX(-${leftPct * 0.18}%) scale(1)`,
-                boxShadow: isHovered
-                  ? pack.mutation
-                    ? MUTATION_VISUALS[pack.mutation]?.glow || "0 18px 34px rgba(0,0,0,0.35)"
-                    : "0 18px 34px rgba(0,0,0,0.35)"
-                  : pack.mutation
-                  ? MUTATION_VISUALS[pack.mutation]?.glow
-                  : "0 10px 28px rgba(0,0,0,0.25)",
+                boxShadow: getSpecialPackGlow(pack, isHovered),
+                border:
+                  pack.cardType === "group"
+                    ? "2px solid rgba(245,158,11,0.85)"
+                    : styles.packCard.border,
                 overflow: "hidden",
                 zIndex: isHovered ? 8 : 2
               
@@ -125,6 +140,30 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
               </div>
             ) : null}
             
+            {pack.cardType === "group" ? (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  zIndex: 6,
+                  padding: "4px 8px",
+                  borderRadius: 999,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: 0.8,
+                  background: "linear-gradient(115deg, #ffa32a, #f6ff42)",
+                  color: "#111827",
+                  boxShadow: "0 0 12px rgba(245,158,11,0.35)",
+                  pointerEvents: "none",
+                  textTransform: "uppercase",
+                }}
+              >
+                Group
+              </div>
+            ) : null}
+
             <div
               style={{
                 ...styles.row,
@@ -190,8 +229,10 @@ const [hoveredPackId, setHoveredPackId] = useState(null);
             >
               {pack.group}
             </div>
-
-            <div style={styles.small}>Tier {pack.tier} Pack</div>
+            
+            <div style={styles.small}>
+              Tier {pack.tier} {pack.cardType === "group" ? "Group Pack" : "Pack"}
+            </div>
 
             <div style={{ marginTop: 8, position: "relative", zIndex: 2 }}>
               Cost: <b>${fmt(pack.cost)}</b>
